@@ -2,32 +2,59 @@ import React, { useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { MainChat } from './components/MainChat';
 import { AdminDashboardModal } from './components/AdminDashboardModal';
+import { PasswordModal } from './components/PasswordModal';
+import { MobileHamburgerMenu } from './components/MobileHamburgerMenu';
+import { OfflineBanner } from './components/OfflineBanner';
 import { useWhatsAppStore } from './store/useWhatsAppStore';
 
 export default function App() {
-  const { setIsAdminOpen, isAdminOpen } = useWhatsAppStore();
+  const {
+    setIsAdminOpen,
+    isAdminOpen,
+    isPasscodeModalOpen,
+    setIsPasscodeModalOpen,
+    setIsAdminAuthenticated,
+    requestAdminAccess,
+  } = useWhatsAppStore();
 
-  // Keyboard shortcut Ctrl+Shift+A to toggle Admin Panel
+  // Keyboard shortcut Ctrl+Shift+A to toggle Admin Panel securely
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a' || e.key === 'ש')) {
         e.preventDefault();
-        setIsAdminOpen(!isAdminOpen);
+        requestAdminAccess();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isAdminOpen, setIsAdminOpen]);
+  }, [requestAdminAccess]);
 
   return (
-    <div className="w-screen h-screen bg-[#0b141a] flex flex-col overflow-hidden font-sans dir-rtl text-[#e9edef] antialiased select-none">
-      {/* WhatsApp Web Outer Canvas Container */}
-      <div className="w-full h-full flex overflow-hidden max-w-[1700px] mx-auto shadow-2xl relative">
+    <div className="w-screen h-screen bg-[#0b141a] flex flex-col overflow-hidden font-sans dir-rtl text-[#e9edef] antialiased select-none relative">
+      {/* Offline Status & Sync Banner */}
+      <OfflineBanner />
+
+      {/* Mobile Auto-Hiding Hamburger Drawer */}
+      <MobileHamburgerMenu onOpenAdminAuth={requestAdminAccess} />
+
+      {/* 100% WhatsApp Web Outer Canvas Container */}
+      <div className="w-full flex-1 flex overflow-hidden max-w-[1700px] mx-auto shadow-2xl relative">
         <Sidebar />
         <MainChat />
       </div>
 
-      {/* Hidden Admin Dashboard Modal */}
+      {/* Protected Admin Passcode Auth Modal (Default PIN: 1125) */}
+      <PasswordModal
+        isOpen={isPasscodeModalOpen}
+        onClose={() => setIsPasscodeModalOpen(false)}
+        onSuccess={() => {
+          setIsAdminAuthenticated(true);
+          setIsPasscodeModalOpen(false);
+          setIsAdminOpen(true);
+        }}
+      />
+
+      {/* Admin Management Dashboard Modal */}
       <AdminDashboardModal />
     </div>
   );

@@ -9,7 +9,7 @@ interface HeaderMenuDropdownProps {
 export const HeaderMenuDropdown: React.FC<HeaderMenuDropdownProps> = ({ onOpenNewContact }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { setIsAdminOpen, setAdminTab, config, toggleGlobalAI, isSoundMuted, toggleSoundMuted } = useWhatsAppStore();
+  const { requestAdminAccess, setAdminTab, config, toggleGlobalAI, isSoundMuted, toggleSoundMuted } = useWhatsAppStore();
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -36,8 +36,8 @@ export const HeaderMenuDropdown: React.FC<HeaderMenuDropdownProps> = ({ onOpenNe
         <div className="absolute left-0 mt-2 w-56 bg-[#233138] border border-[#2a3942] rounded-md shadow-2xl z-50 py-1.5 text-[#e9edef] text-sm animate-in fade-in zoom-in-95 duration-100">
           <button
             onClick={() => {
-              setIsAdminOpen(true);
               setAdminTab('metrics');
+              requestAdminAccess();
               setIsOpen(false);
             }}
             className="w-full text-right px-4 py-2.5 hover:bg-[#182229] flex items-center justify-between text-[#00a884] font-medium"
@@ -45,9 +45,9 @@ export const HeaderMenuDropdown: React.FC<HeaderMenuDropdownProps> = ({ onOpenNe
           >
             <span className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4" />
-              פאנל ניהול (Ctrl+Shift+A)
+              פאנל ניהול (קוד 1125)
             </span>
-            <span className="bg-[#00a884]/20 text-[#00a884] text-[10px] px-1.5 py-0.5 rounded font-mono">ADMIN</span>
+            <span className="bg-[#00a884]/20 text-[#00a884] text-[10px] px-1.5 py-0.5 rounded font-mono">1125</span>
           </button>
 
           <button
@@ -93,8 +93,8 @@ export const HeaderMenuDropdown: React.FC<HeaderMenuDropdownProps> = ({ onOpenNe
 
           <button
             onClick={() => {
-              setIsAdminOpen(true);
               setAdminTab('logs');
+              requestAdminAccess();
               setIsOpen(false);
             }}
             className="w-full text-right px-4 py-2.5 hover:bg-[#182229] flex items-center gap-2 text-xs text-[#8696a0]"

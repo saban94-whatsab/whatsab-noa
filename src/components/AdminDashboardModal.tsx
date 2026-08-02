@@ -17,8 +17,17 @@ import {
   Globe,
   Sliders,
   Terminal,
+  BookOpen,
+  Package,
+  AlertTriangle,
+  Folder,
 } from 'lucide-react';
 import { useWhatsAppStore } from '../store/useWhatsAppStore';
+import { CustomersTab } from './CustomersTab';
+import { OrdersTab } from './OrdersTab';
+import { DiscrepanciesTab } from './DiscrepanciesTab';
+import { LogisticsDictionaryTab } from './LogisticsDictionaryTab';
+import { MessageAnalyticsChart } from './MessageAnalyticsChart';
 
 export const AdminDashboardModal: React.FC = () => {
   const {
@@ -174,7 +183,7 @@ export const AdminDashboardModal: React.FC = () => {
         <div className="bg-[#182229] border-b border-[#2a3942] px-6 flex gap-2 shrink-0 overflow-x-auto">
           <button
             onClick={() => setAdminTab('metrics')}
-            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors ${
+            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
               adminTab === 'metrics'
                 ? 'border-[#00a884] text-[#00a884]'
                 : 'border-transparent text-[#8696a0] hover:text-[#e9edef]'
@@ -186,8 +195,73 @@ export const AdminDashboardModal: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setAdminTab('analytics')}
+            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
+              adminTab === 'analytics'
+                ? 'border-[#00a884] text-[#00a884]'
+                : 'border-transparent text-[#8696a0] hover:text-[#e9edef]'
+            }`}
+            id="admin-tab-btn-analytics"
+          >
+            <Zap className="w-4 h-4 text-[#00a884]" />
+            2. נפח הודעות (30 ימים)
+          </button>
+
+          <button
+            onClick={() => setAdminTab('customers')}
+            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
+              adminTab === 'customers'
+                ? 'border-[#00a884] text-[#00a884]'
+                : 'border-transparent text-[#8696a0] hover:text-[#e9edef]'
+            }`}
+            id="admin-tab-btn-customers"
+          >
+            <Folder className="w-4 h-4" />
+            3. תיק לקוח וחשבונות
+          </button>
+
+          <button
+            onClick={() => setAdminTab('orders')}
+            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
+              adminTab === 'orders'
+                ? 'border-[#00a884] text-[#00a884]'
+                : 'border-transparent text-[#8696a0] hover:text-[#e9edef]'
+            }`}
+            id="admin-tab-btn-orders"
+          >
+            <Package className="w-4 h-4" />
+            3. לוג הזמנות מערכת
+          </button>
+
+          <button
+            onClick={() => setAdminTab('discrepancies')}
+            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
+              adminTab === 'discrepancies'
+                ? 'border-amber-500 text-amber-400 font-bold'
+                : 'border-transparent text-[#8696a0] hover:text-[#e9edef]'
+            }`}
+            id="admin-tab-btn-discrepancies"
+          >
+            <AlertTriangle className="w-4 h-4 text-amber-400" />
+            4. חריגות לוגיסטיות
+          </button>
+
+          <button
+            onClick={() => setAdminTab('dictionary')}
+            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
+              adminTab === 'dictionary'
+                ? 'border-[#00a884] text-[#00a884]'
+                : 'border-transparent text-[#8696a0] hover:text-[#e9edef]'
+            }`}
+            id="admin-tab-btn-dictionary"
+          >
+            <BookOpen className="w-4 h-4" />
+            5. מילון לוגיסטי
+          </button>
+
+          <button
             onClick={() => setAdminTab('crm')}
-            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors ${
+            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
               adminTab === 'crm'
                 ? 'border-[#00a884] text-[#00a884]'
                 : 'border-transparent text-[#8696a0] hover:text-[#e9edef]'
@@ -195,12 +269,12 @@ export const AdminDashboardModal: React.FC = () => {
             id="admin-tab-btn-crm"
           >
             <Users className="w-4 h-4" />
-            2. ניהול צ'אטים ו-CRM (השתלטות)
+            6. ניהול צ'אטים ו-CRM
           </button>
 
           <button
             onClick={() => setAdminTab('prompt')}
-            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors ${
+            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
               adminTab === 'prompt'
                 ? 'border-[#00a884] text-[#00a884]'
                 : 'border-transparent text-[#8696a0] hover:text-[#e9edef]'
@@ -208,12 +282,12 @@ export const AdminDashboardModal: React.FC = () => {
             id="admin-tab-btn-prompt"
           >
             <Sliders className="w-4 h-4" />
-            3. עורך פרומפט ומחירון
+            7. עורך פרומפט
           </button>
 
           <button
             onClick={() => setAdminTab('logs')}
-            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors ${
+            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
               adminTab === 'logs'
                 ? 'border-[#00a884] text-[#00a884]'
                 : 'border-transparent text-[#8696a0] hover:text-[#e9edef]'
@@ -221,7 +295,7 @@ export const AdminDashboardModal: React.FC = () => {
             id="admin-tab-btn-logs"
           >
             <Terminal className="w-4 h-4" />
-            4. מוניטור וובהוק JONI Plugin
+            8. מוניטור JONI
           </button>
         </div>
 
@@ -318,10 +392,28 @@ export const AdminDashboardModal: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Data Visualization Section - Recharts 30-Day Message Volume */}
+              <MessageAnalyticsChart />
             </div>
           )}
 
-          {/* TAB 2: LIVE CRM & CONVERSATION MANAGER */}
+          {/* TAB 2: DATA VISUALIZATION ANALYTICS */}
+          {adminTab === 'analytics' && <MessageAnalyticsChart />}
+
+          {/* TAB: CUSTOMERS CRM (תיק_לקוח_וחשבונות) */}
+          {adminTab === 'customers' && <CustomersTab />}
+
+          {/* TAB: ORDERS LOG (לוג_הזמנות_מערכת) */}
+          {adminTab === 'orders' && <OrdersTab />}
+
+          {/* TAB: DISCREPANCIES AUDIT (חריגות_לוגיסטיות) */}
+          {adminTab === 'discrepancies' && <DiscrepanciesTab />}
+
+          {/* TAB: LOGISTICS DICTIONARY (מילון_לוגיסטי) */}
+          {adminTab === 'dictionary' && <LogisticsDictionaryTab />}
+
+          {/* TAB: LIVE CRM & CONVERSATION MANAGER */}
           {adminTab === 'crm' && (
             <div className="h-full flex flex-col lg:flex-row gap-4">
               {/* Chat Selector List */}

@@ -13,7 +13,7 @@ export const Sidebar: React.FC = () => {
     activeFilter,
     setActiveFilter,
     createNewContact,
-    setIsAdminOpen,
+    requestAdminAccess,
   } = useWhatsAppStore();
 
   const [isNewContactModalOpen, setIsNewContactModalOpen] = useState(false);
@@ -53,9 +53,9 @@ export const Sidebar: React.FC = () => {
         {/* User Profile Avatar & Admin Trigger */}
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setIsAdminOpen(true)}
+            onClick={() => requestAdminAccess()}
             className="relative group focus:outline-none flex items-center gap-2"
-            title="לחץ לפתיחת פאנל ניהול (Ctrl+Shift+A)"
+            title="לחץ לפתיחת פאנל ניהול מוגן בסיסמה 1125"
             id="btn-profile-avatar-admin"
           >
             <div className="w-10 h-10 rounded-full bg-[#8696a0] flex items-center justify-center overflow-hidden shrink-0">
@@ -74,7 +74,7 @@ export const Sidebar: React.FC = () => {
         {/* Action Controls */}
         <div className="flex items-center gap-4 text-[#8696a0]">
           <button
-            onClick={() => setIsAdminOpen(true)}
+            onClick={() => requestAdminAccess()}
             className="p-1.5 hover:text-[#e9edef] rounded-full hover:bg-[#2a3942] transition-colors"
             title="סטטוס מערכת ופאנל ניהול"
             id="btn-sidebar-admin-quick"

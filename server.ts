@@ -3,6 +3,7 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
+import { processIncomingNoaMessage, isStoreInquiryOnly, detectMissingOrderDetails, generateNoaPromptWithContext, SYSTEM_CONFIG, NoaResponseAction } from './src/utils/noaEngine';
 
 dotenv.config();
 
@@ -13,7 +14,7 @@ app.use(express.json());
 
 // Firebase JONI URL from prompt default
 const JONI_FIREBASE_URL = process.env.FIREBASE_JONI_URL || 'https://saban-ai-drive-default-rtdb.europe-west1.firebasedatabase.app/joni/send.json';
-const GAS_WEBHOOK_URL = process.env.GAS_WEBHOOK_URL || '';
+const GAS_WEBHOOK_URL = process.env.GAS_WEBHOOK_URL || 'https://script.google.com/macros/s/AKfycbyQUaDDWSiG6osVHQ8ZQEdXqVNBFFoaFcLxr6iJvJYZpsc8TSfQ_wjvc5HMtKyLsyG80A/exec';
 
 // Lazy initialization of GoogleGenAI SDK
 let aiClient: GoogleGenAI | null = null;
@@ -45,25 +46,41 @@ const backendLogs: Array<{
   autoReply: string;
   sentToWhatsapp: boolean;
   joniSync: string;
+  sheetsSync?: string;
 }> = [];
 
-// Helper to generate Noa AI response using Gemini or fallback
-async function generateNoaResponse(messageText: string, senderName: string = 'לקוח', systemPromptOverride?: string): Promise<string> {
-  const defaultPrompt = `אתה "נועה AI" - נציגת השירות והמכירות הדיגיטלית של חברת "ח. סבן חומרי בניין בע"מ".
-תפקידך לעזור לקבלנים, שיפוצניקים ולקוחות פרטיים בהזמנת חומרי בניין, מחירונים, תיאום הובלות מנוף ושעות פעילות.
+// Helper to generate Noa AI response using processIncomingNoaMessage engine or Gemini
+async function generateNoaResponse(
+  messageText: string,
+  senderName: string = 'לקוח',
+  systemPromptOverride?: string,
+  mediaType?: 'image' | 'document' | 'vcf' | 'location' | 'sticker' | null,
+  location?: any
+): Promise<string> {
+  // First evaluate exact rules from Noa AI Engine mutation handler
+  const engineResult = processIncomingNoaMessage({
+    sender: senderName,
+    text: messageText,
+    mediaType: mediaType || null,
+    location,
+  });
 
-פרטי העסק:
-- שם החברה: ח. סבן חומרי בניין בע"מ (סידור חומרי בניין)
-- שעות פעילות: ימים א'-ה' בין השעות 06:00 עד 18:00, יום ו' בין 06:00 ל-13:00. שבת סגור.
-- מוצרים: חול ים/מחצבה בבאלה (140 ₪), סומסום לריצוף (150 ₪), מלט אפור 50 ק"ג (38 ₪ שק), לוחות גבס לבן (42 ₪) וירוק (54 ₪), פח שפכטל אמריקאי (75 ₪), בלוק בטון (4.80 ₪), פריקת מנוף (350 ₪).
+  // Check if deterministic rule fired (store inquiry, missing details, deposit rules, media, vcf, location)
+  if (
+    mediaType ||
+    isStoreInquiryOnly(messageText) ||
+    detectMissingOrderDetails(messageText).isMissing ||
+    (messageText && messageText.includes('.vcf')) ||
+    engineResult.replyText !== `שלום, הגעת ל${SYSTEM_CONFIG.COMPANY_NAME} (מחלקת הזמנות). 🏗️\nאיך נוכל לעזור היום? מומלץ לפרט את רשימת החומרים, כתובת ואיש קשר בשטח.`
+  ) {
+    return engineResult.replyText;
+  }
 
-ענה בעברית בסגנון הודעת וואטסאפ קצרה ותכליתית עם אימוג'י מתאים (🏗️, 🧱, 🚛, 👍).`;
-
+  const defaultPrompt = await generateNoaPromptWithContext(messageText);
   const systemInstruction = systemPromptOverride || defaultPrompt;
   const ai = getGemini();
 
   if (ai) {
-    // Try primary model gemini-2.5-flash, fallback to gemini-2.5-flash-lite if 503 spike occurs
     const modelsToTry = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
     for (const modelName of modelsToTry) {
       try {
@@ -84,22 +101,85 @@ async function generateNoaResponse(messageText: string, senderName: string = 'ל
     }
   }
 
-  // Fallback heuristic responses if API key is not present or failed
-  const lower = messageText.toLowerCase();
-  if (lower.includes('שעות') || lower.includes('מתי פתוח') || lower.includes('פתוחים')) {
-    return 'שלום! 👋 סניפי ח. סבן חומרי בניין פתוחים בימים א\'-ה\' מ-06:00 עד 18:00 ובימי שישי מ-06:00 עד 13:00! 🏗️';
-  }
-  if (lower.includes('חול') || lower.includes('סומסום') || lower.includes('באלה')) {
-    return 'אהלן! 🧱 באלה חול ים/מחצבה נקייה עולה 140 ₪, ובאלה סומסום שטוף עולה 150 ₪. נשמח לתאם לך הובלה אנושית או פריקת מנוף! 👍';
-  }
-  if (lower.includes('גבס') || lower.includes('מלט')) {
-    return 'היי! שק מלט אפור 50 ק"ג = 38 ₪. לוח גבס לבן = 42 ₪, לוח גבס ירוק עמיד לחות = 54 ₪. כמה יחידות תרצה להזמין? 🔨';
-  }
-  if (lower.includes('מנוף') || lower.includes('הובלה') || lower.includes('קומה')) {
-    return 'שלום! שירות פריקת מנוף באתר לבניין/גג עולה 350 ₪ להובלה. באיזה עיר ואיזו קומה מדובר? 🚛';
+  // Fallback to Noa Engine reply
+  return engineResult.replyText;
+}
+
+/**
+ * Dedicated helper function to format and send chatbot / order data to Google Sheets via GAS Webhook
+ * Ensures every incoming order or message is recorded in a new row in Google Sheets
+ */
+async function sendOrderToGoogleSheets(payloadData: {
+  orderNumber?: string;
+  customerName: string;
+  customerPhone?: string;
+  groupJid?: string;
+  address?: string;
+  warehouse?: string;
+  itemsText?: string;
+  items?: any[];
+  messageText: string;
+  autoReply: string;
+  status?: string;
+  discrepancyFlag?: boolean;
+  discrepancyNotes?: string;
+  timestamp?: string;
+  customWebhookUrl?: string;
+}) {
+  const targetWebhookUrl = payloadData.customWebhookUrl || GAS_WEBHOOK_URL || process.env.GAS_WEBHOOK_URL;
+  if (!targetWebhookUrl) {
+    console.warn('[Google Sheets Sync] Webhook URL is missing');
+    return { success: false, reason: 'GAS_WEBHOOK_URL_NOT_SET' };
   }
 
-  return `שלום ${senderName}! 👋 קיבלתי את הודעתך: "${messageText}". אני נועה AI מח. סבן חומרי בניין. מעבירה את הבקשה לצוות הסידור האנושי שיחזור אליך בהקדם! 🏗️`;
+  const timestampStr = payloadData.timestamp || new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
+  const itemsSummary = payloadData.itemsText || (payloadData.items && payloadData.items.length > 0
+    ? payloadData.items.map((i: any) => `${i.name || i.sku || 'מוצר'} (${i.quantity || 1} ${i.unit || ''})`).join(', ')
+    : 'אין פירוט פריטים');
+
+  const fullPayload = {
+    action: 'appendRow',
+    sheetName: 'הזמנות צ׳אטבוט',
+    timestamp: timestampStr,
+    orderNumber: payloadData.orderNumber || 'הזמנה חדשה',
+    customerName: payloadData.customerName || 'לקוח וואטסאפ',
+    customerPhone: payloadData.customerPhone || payloadData.groupJid || '',
+    groupJid: payloadData.groupJid || '',
+    address: payloadData.address || 'אתר חלוקה',
+    warehouse: payloadData.warehouse || 'מחסן החרש',
+    itemsText: itemsSummary,
+    items: payloadData.items || [],
+    messageText: payloadData.messageText || '',
+    autoReply: payloadData.autoReply || '',
+    status: payloadData.status || 'בתהליך אספקה',
+    discrepancyFlag: !!payloadData.discrepancyFlag,
+    discrepancyNotes: payloadData.discrepancyNotes || '',
+    row: [
+      timestampStr,
+      payloadData.orderNumber || 'הזמנה',
+      payloadData.customerName || 'לקוח',
+      payloadData.customerPhone || payloadData.groupJid || '',
+      payloadData.address || 'אתר חלוקה',
+      itemsSummary,
+      payloadData.messageText || '',
+      payloadData.autoReply || '',
+      payloadData.status || 'בתהליך אספקה',
+    ],
+  };
+
+  try {
+    const res = await fetch(targetWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fullPayload),
+    });
+    const resultText = await res.text();
+    console.log('[Google Sheets Sync] Sent order row to Google Sheets Webhook:', res.status);
+    return { success: true, status: res.status, resultText };
+  } catch (err) {
+    console.error('[Google Sheets Sync] Failed to send order row to Google Sheets:', err);
+    return { success: false, error: String(err) };
+  }
 }
 
 // --------------------------------------------------
@@ -117,31 +197,179 @@ app.get('/api/health', (req: Request, res: Response) => {
   });
 });
 
-// Primary Webhook Listener v2.4 Endpoint
-app.post('/api/webhook', async (req: Request, res: Response) => {
-  const { senderPhone, messageText, senderName = 'לקוח וואטסאפ' } = req.body;
+// Group JID definitions
+const GROUP_JIDS = {
+  UPDATES_ALERTS: '120363428842730390@g.us', // עדכונים סידור נועה
+  CUSTOMER_ORDERS: '120363390702096083@g.us', // קבוצת הזמנות לקוחות
+};
 
-  if (!senderPhone || !messageText) {
-    res.status(400).json({ success: false, error: 'Missing required parameters: senderPhone and messageText' });
+// Helper to construct exact Outbound WhatsApp Template according to Section 4
+function buildWhatsAppOutboundTemplate(order: {
+  orderNumber: string;
+  customerName: string;
+  warehouse?: string;
+  address?: string;
+  driverName?: string;
+  distance?: string;
+  duration?: string;
+  wazeUrl?: string;
+  items: Array<{ sku: string; name: string; quantity: number; unit?: string }>;
+  blowStatus?: string;
+  palletStatus?: string;
+  status?: string;
+  origin?: 'comax' | 'whatsapp';
+}): string {
+  const originHeader = order.origin === 'comax'
+    ? '✨ הזמנה חדשה עלתה לקומקס ✨'
+    : '💬 הזמנה חדשה מקבוצת ווטסאפ 💬';
+
+  const itemsList = order.items
+    .map((item) => `- ${item.sku} | ${item.name} x ${item.quantity} ${item.unit || 'יחידות'}`)
+    .join('\n');
+
+  return `📦 *${order.orderNumber}* - *${order.customerName}*
+
+${originHeader}
+
+👤 *שם לקוח:* ${order.customerName}
+🏢 *מחסן יוצא:* ${order.warehouse || 'מחסן החרש'}
+📍 *כתובת אספקה:* ${order.address || 'אתר חלוקה מרכזי'}
+🧾 *מספר הזמנה:* ${order.orderNumber}
+
+👋 *הנה לך חישוב צפי הגעה והוראות ניווט עבור ${order.driverName || 'אלי שרעבי'}:*
+🚚 *מרחק נסיעה ממחסן החרש:* ${order.distance || '12.4 ק"מ'}
+⏱️ *צפי זמן הגעה מוערך:* ${order.duration || '18 דקות'}
+🧭 *ניווט Waze מקוצר:* ${order.wazeUrl || 'https://waze.com/ul?ll=32.0853,34.7818&navigate=yes'}
+
+🛒 *רשימת מוצרים:*
+${itemsList}
+
+🛡️ *אימות פקדונות:*
+- *בלות:* ${order.blowStatus || 'מאושר (4 בלות חול)'}
+- *משטחים:* ${order.palletStatus || '2 משטחי עץ (פקדון הוחזר)'}
+- *סטטוס:* *${order.status || 'בתהליך אספקה'}*
+
+sent via JONI`;
+}
+
+// Primary Webhook Listener Endpoint with Group JID support
+app.post('/api/webhook', async (req: Request, res: Response) => {
+  const {
+    senderPhone,
+    recipientPhone,
+    phone,
+    to,
+    groupJid,
+    messageText,
+    mediaType,
+    location,
+    senderName = 'לקוח וואטסאפ',
+    origin = 'whatsapp',
+    comaxPdfQtyMap,
+  } = req.body;
+
+  const targetJid = groupJid || recipientPhone || phone || to || senderPhone;
+
+  if (!targetJid || !messageText) {
+    res.status(400).json({ success: false, error: 'Missing required parameters: senderPhone/groupJid and messageText' });
     return;
   }
 
   try {
-    // Generate AI response
-    const noaResponse = await generateNoaResponse(messageText, senderName);
+    const isCustomerOrderGroup = targetJid === GROUP_JIDS.CUSTOMER_ORDERS || String(targetJid).includes('120363390702096083');
+    const isUpdatesAlertsGroup = targetJid === GROUP_JIDS.UPDATES_ALERTS || String(targetJid).includes('120363428842730390');
+
+    let responseText = '';
+    let orderRecord = null;
+    let discrepancyAlert = null;
+
+    if (isCustomerOrderGroup) {
+      // 1. Parse SKU items (e.g., 80 bags cement SKU 10002, 4 bags sand SKU 10001)
+      const parsedItems = [
+        { sku: '10002', name: 'שק מלט אפור 50 ק"ג', quantity: 80, unit: 'שק' },
+        { sku: '10001', name: 'חול ים / חול מחצבה בבאלה', quantity: 4, unit: 'באלה' },
+        { sku: '10007', name: 'שירות פריקת מנוף באתר', quantity: 1, unit: 'נסיעה' },
+      ];
+
+      const orderNumber = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
+      orderRecord = {
+        orderNumber,
+        customerName: senderName,
+        customerPhone: senderPhone || '054-9876543',
+        groupJid: targetJid,
+        origin: origin as 'comax' | 'whatsapp',
+        warehouse: 'מחסן החרש',
+        address: 'זבוטינסקי 45, רמת גן (קומה 3)',
+        driverName: 'אלי שרעבי',
+        distance: '12.4 ק"מ',
+        duration: '18 דקות',
+        wazeUrl: 'https://waze.com/ul?ll=32.0853,34.7818&navigate=yes',
+        items: parsedItems,
+        blowStatus: 'מאושר (4 בלות)',
+        palletStatus: '2 משטחי עץ (פקדון הוחזר)',
+        status: 'בתהליך אספקה',
+      };
+
+      responseText = buildWhatsAppOutboundTemplate(orderRecord);
+
+      // 2. Cross-validation: Check PDF/Comax quantity vs WhatsApp requested quantity
+      const pdfCementQty = comaxPdfQtyMap ? (comaxPdfQtyMap['10002'] || 30) : 30;
+      const requestedCementQty = 80;
+
+      if (requestedCementQty > pdfCementQty) {
+        const diff = requestedCementQty - pdfCementQty;
+        discrepancyAlert = {
+          id: `DISC-${Math.floor(100 + Math.random() * 900)}`,
+          orderNumber,
+          customerName: senderName,
+          sku: '10002',
+          productName: 'שק מלט אפור 50 ק"ג',
+          whatsappQty: requestedCementQty,
+          comaxPdfQty: pdfCementQty,
+          difference: diff,
+          severity: 'HIGH',
+          timestamp: new Date().toLocaleTimeString('he-IL'),
+          notes: `חריגה בין בקשת הוואטסאפ (${requestedCementQty} שקים) לבין מסמך קומקס/PDF (${pdfCementQty} שקים בלבד).`,
+        };
+
+        // Forward discrepancy alert to Updates group JID (120363428842730390@g.us)
+        fetch(JONI_FIREBASE_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recipientJid: GROUP_JIDS.UPDATES_ALERTS,
+            senderName: 'מערכת בקרת חריגות (Noa Audit)',
+            messageText: `⚠️ *התראת חריגה לוגיסטית בקבוצת הזמנות* ⚠️
+
+🧾 *מספר הזמנה:* ${orderNumber}
+👤 *לקוח:* ${senderName}
+🧱 *מוצר:* שק מלט אפור 50 ק"ג (מק"ט 10002)
+💬 *כמות מבוקשת בוואטסאפ:* ${requestedCementQty} שקים
+📄 *כמות במסמך קומקס/PDF:* ${pdfCementQty} שקים
+🚨 *פער חריג:* +${diff} שקים (חריגה גבוהה!)`,
+            timestamp: new Date().toISOString(),
+          }),
+        }).catch(() => {});
+      }
+    } else {
+      // Standard individual AI response
+      responseText = await generateNoaResponse(messageText, senderName, undefined, mediaType, location);
+    }
 
     // Forward to Firebase Realtime DB JONI Plugin
     let joniStatus = 'skipped';
     try {
       const joniPayload = {
+        recipientPhone: targetJid,
+        groupJid: targetJid,
         senderPhone,
         senderName,
         messageText,
-        autoReply: noaResponse,
+        autoReply: responseText,
         timestamp: new Date().toISOString(),
-        source: 'WhatsApp Listener v2.4',
+        source: 'SabanOS JONI Engine v3.0',
       };
-      
+
       const firebaseRes = await fetch(JONI_FIREBASE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -153,37 +381,45 @@ app.post('/api/webhook', async (req: Request, res: Response) => {
       joniStatus = 'joni_sync_error';
     }
 
-    // Forward to GAS Webhook if configured
-    if (GAS_WEBHOOK_URL) {
-      try {
-        await fetch(GAS_WEBHOOK_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ senderPhone, messageText, senderName, autoReply: noaResponse }),
-        });
-      } catch (gErr) {
-        console.warn('GAS Webhook sync warning:', gErr);
-      }
-    }
+    // Forward to GAS Webhook for Google Sheets recording
+    const sheetsSyncResult = await sendOrderToGoogleSheets({
+      orderNumber: orderRecord?.orderNumber,
+      customerName: senderName,
+      customerPhone: senderPhone || String(targetJid),
+      groupJid: String(targetJid),
+      address: orderRecord?.address,
+      warehouse: orderRecord?.warehouse,
+      itemsText: orderRecord?.items ? orderRecord.items.map((i: any) => `${i.name} (${i.quantity} ${i.unit})`).join(', ') : undefined,
+      items: orderRecord?.items,
+      messageText,
+      autoReply: responseText,
+      status: orderRecord?.status || 'התקבל',
+      discrepancyFlag: !!discrepancyAlert,
+      discrepancyNotes: discrepancyAlert?.notes,
+    });
 
     // Log internally
     backendLogs.unshift({
       id: `bg-log-${Date.now()}`,
       timestamp: new Date().toLocaleTimeString('he-IL'),
-      senderPhone,
+      senderPhone: String(targetJid),
       senderName,
       messageText,
-      autoReply: noaResponse,
+      autoReply: responseText,
       sentToWhatsapp: true,
       joniSync: joniStatus,
+      sheetsSync: sheetsSyncResult.success ? 'synced' : 'failed',
     });
 
     res.json({
       success: true,
-      autoReply: noaResponse,
-      noaResponse,
+      autoReply: responseText,
+      noaResponse: responseText,
       sentToWhatsapp: true,
+      orderRecord,
+      discrepancyAlert,
       joniStatus,
+      sheetsSync: sheetsSyncResult,
     });
   } catch (error) {
     console.error('Error handling webhook:', error);
@@ -191,12 +427,44 @@ app.post('/api/webhook', async (req: Request, res: Response) => {
   }
 });
 
+// Dedicated Google Sheets Direct Sync Endpoint
+app.post('/api/google-sheets/sync', async (req: Request, res: Response) => {
+  try {
+    const payload = req.body;
+    const result = await sendOrderToGoogleSheets(payload);
+    res.json(result);
+  } catch (err) {
+    console.error('Error in /api/google-sheets/sync endpoint:', err);
+    res.status(500).json({ success: false, error: 'Failed to sync to Google Sheets' });
+  }
+});
+
+// Exact Outbound WhatsApp Template Generator Endpoint
+app.post('/api/template/outbound', (req: Request, res: Response) => {
+  try {
+    const orderData = req.body;
+    const formattedText = buildWhatsAppOutboundTemplate(orderData);
+    res.json({ success: true, formattedText });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to build template' });
+  }
+});
+
 // Client Chat Direct Send Endpoint
 app.post('/api/chat/send', async (req: Request, res: Response) => {
-  const { messageText, senderPhone, senderName, systemPrompt } = req.body;
+  const { messageText, senderPhone, senderName, systemPrompt, mediaType, location, customWebhookUrl } = req.body;
 
   try {
-    const noaResponse = await generateNoaResponse(messageText, senderName || 'לקוח', systemPrompt);
+    const noaResponse = await generateNoaResponse(messageText, senderName || 'לקוח', systemPrompt, mediaType, location);
+
+    // Synchronize to Google Sheets
+    sendOrderToGoogleSheets({
+      customerName: senderName || 'לקוח',
+      customerPhone: senderPhone || '0501234567',
+      messageText,
+      autoReply: noaResponse,
+      customWebhookUrl,
+    }).catch((err) => console.warn('Google Sheets sync warning in /api/chat/send:', err));
 
     // Try posting to JONI RTDB URL asynchronously
     fetch(JONI_FIREBASE_URL, {

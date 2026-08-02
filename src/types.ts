@@ -75,12 +75,90 @@ export interface SystemConfig {
   products: ProductItem[];
 }
 
-export interface SystemMetrics {
-  totalChats: number;
-  totalMessages: number;
-  aiResponsesCount: number;
-  avgResponseTimeMs: number;
-  firebaseStatus: 'connected' | 'disconnected' | 'testing';
-  gasStatus: 'active' | 'inactive' | 'testing';
-  lastSyncTime?: string;
+export interface CustomerRecord {
+  id: string;
+  name: string;
+  phone: string;
+  address: string;
+  creditLimit: string;
+  currentBalance: string;
+  driveFolderUrl?: string;
+  comaxId: string;
+  createdAt: string;
+  notes?: string;
+  activeOrdersCount?: number;
+}
+
+export interface LogisticsDictionaryItem {
+  sku: string;
+  productName: string;
+  category: string;
+  aliases: string[];
+  unit: string;
+  unitPrice: number;
+}
+
+export interface OrderItem {
+  sku: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  price: number;
+}
+
+export interface OrderRecord {
+  orderNumber: string;
+  customerName: string;
+  customerPhone: string;
+  groupJid?: string;
+  origin: 'comax' | 'whatsapp';
+  warehouse: string;
+  address: string;
+  driverName: string;
+  distance: string;
+  duration: string;
+  wazeUrl: string;
+  items: OrderItem[];
+  blowStatus: string;
+  palletStatus: string;
+  status: string;
+  timestamp: string;
+  formattedTemplate?: string;
+  discrepancyFlag?: boolean;
+}
+
+export interface LogisticsDiscrepancy {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  sku: string;
+  productName: string;
+  whatsappQty: number;
+  comaxPdfQty: number;
+  difference: number;
+  severity: 'HIGH' | 'MEDIUM' | 'CRITICAL';
+  timestamp: string;
+  status: 'PENDING_REVIEW' | 'RESOLVED' | 'APPROVED';
+  notes: string;
+}
+
+export const GROUP_JIDS = {
+  UPDATES_ALERTS: '120363428842730390@g.us', // עדכונים סידור נועה
+  CUSTOMER_ORDERS: '120363390702096083@g.us', // קבוצת הזמנות לקוחות
+} as const;
+
+export interface GroupWebhookPayload {
+  groupJid?: string;
+  recipientPhone?: string;
+  phone?: string;
+  to?: string;
+  senderPhone?: string;
+  senderName?: string;
+  messageText?: string;
+  timestamp?: string;
+  origin?: 'comax' | 'whatsapp';
+  comaxPdfData?: {
+    orderNumber: string;
+    items: Array<{ sku: string; quantity: number }>;
+  };
 }

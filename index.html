@@ -1,13 +1,31 @@
 <!doctype html>
-<html lang="en">
+<html lang="he" dir="rtl" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>נועה AI - ח. סבן חומרי בניין בע"מ</title>
+    <meta name="description" content="מערכת ניהול הזמנות חומרי בניין וצ'אטבוט וואטסאפ חכם" />
+    <meta name="theme-color" content="#00a884" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="נועה AI" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="https://i.ibb.co/Zz6H1zth/1785576538638.png" />
+    <link rel="icon" type="image/png" href="https://i.ibb.co/Zz6H1zth/1785576538638.png" />
   </head>
-  <body>
+  <body class="bg-[#0b141a] text-[#e9edef] antialiased select-none overflow-hidden touch-manipulation">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Register PWA Service Worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('[PWA] Service Worker registered:', reg.scope))
+            .catch(err => console.warn('[PWA] Service Worker registration failed:', err));
+        });
+      }
+    </script>
   </body>
 </html>
-
