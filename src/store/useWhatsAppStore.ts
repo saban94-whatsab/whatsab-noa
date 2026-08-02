@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { Contact, Message, MessageStatus, SystemConfig, WebhookLog, ProductItem, CustomerRecord, LogisticsDictionaryItem, OrderRecord, LogisticsDiscrepancy, GROUP_JIDS } from '../types';
+import { Contact, Message, MessageStatus, SystemConfig, WebhookLog, ProductItem, CustomerRecord, LogisticsDictionaryItem, OrderRecord, LogisticsDiscrepancy, GROUP_JIDS, OrderStatus } from '../types';
 import { 
   INITIAL_CONFIG, 
   INITIAL_CONTACTS, 
@@ -15,6 +15,8 @@ import {
 } from '../data/initialData';
 import { playIncomingSound, playOutgoingSound, triggerBrowserNotification } from '../utils/audio';
 import { syncOrderToGoogleSheets } from '../utils/googleSheetsSync';
+import { getSavedStatuses, saveOrderStatus, sendStatusUpdateToWhatsApp } from '../utils/orderStatusService';
+
 
 export function formatWhatsAppOutboundTemplate(order: OrderRecord): string {
   const originHeader = order.origin === 'comax'
@@ -96,6 +98,7 @@ interface WhatsAppState {
   updateCustomer: (id: string, customer: Partial<CustomerRecord>) => void;
   deleteCustomer: (id: string) => void;
   createOrder: (order: Partial<OrderRecord>) => OrderRecord;
+  updateOrderStatus: (orderNumber: string, status: OrderStatus, notifyWhatsApp?: boolean) => Promise<boolean>;
   resolveDiscrepancy: (id: string, notes?: string) => void;
   processGroupOrderMessage: (senderName: string, text: string, groupJid?: string, comaxPdfQtyMap?: Record<string, number>) => Promise<OrderRecord>;
 
@@ -658,6 +661,28 @@ export const useWhatsAppStore = create<WhatsAppState>()(
         return newOrder;
       },
 
+      updateOrderStatus: async (orderNumber, status, notifyWhatsApp = true) => {
+        saveOrderStatus(orderNumber, status);
+        const targetOrder = get().orders.find((o) => String(o.orderNumber) === String(orderNumber));
+
+        set((state) => ({
+          orders: state.orders.map((o) =>
+            String(o.orderNumber) === String(orderNumber) ? { ...o, status } : o
+          ),
+        }));
+
+        if (notifyWhatsApp && targetOrder) {
+          const success = await sendStatusUpdateToWhatsApp(
+            String(orderNumber),
+            targetOrder.customerName,
+            status,
+            targetOrder.driverName
+          );
+          return success;
+        }
+        return true;
+      },
+
       resolveDiscrepancy: (id, notes) => {
         set((state) => ({
           discrepancies: state.discrepancies.map((d) =>
@@ -843,9 +868,15 @@ export const useWhatsAppStore = create<WhatsAppState>()(
       syncLiveSheetData: async () => {
         try {
           set({ isSendingApi: true });
-          const { orders: liveOrders, customers: liveCustomers } = await fetchLiveOrderLogAndCustomers();
+          const { orders: rawLiveOrders, customers: liveCustomers } = await fetchLiveOrderLogAndCustomers();
           const liveDict = await fetchLiveLogisticsDictionary();
           const liveProducts = mapDictionaryToProducts(liveDict);
+
+          const savedStatuses = getSavedStatuses();
+          const liveOrders = rawLiveOrders.map((o) => ({
+            ...o,
+            status: savedStatuses[o.orderNumber] || o.status,
+          }));
 
           const currentOrders = get().orders;
           const currentOrderNums = new Set(currentOrders.map((o) => String(o.orderNumber)));

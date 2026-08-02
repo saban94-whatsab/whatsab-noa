@@ -164,3 +164,21 @@ export interface GroupWebhookPayload {
     items: Array<{ sku: string; quantity: number }>;
   };
 }
+
+export type OrderStatus = 'PENDING' | 'APPROVED' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED' | 'HOLD';
+
+export interface OrderStatusInfo {
+  label: string;
+  icon: string;
+  colorClass: string;
+}
+
+export const ORDER_STATUS_LABELS: Record<OrderStatus, OrderStatusInfo> = {
+  PENDING: { label: 'ממתין לשיבוץ', icon: '⏳', colorClass: 'text-amber-400 bg-amber-500/20 border-amber-500/40' },
+  APPROVED: { label: 'מאושר בסידור', icon: '✅', colorClass: 'text-emerald-400 bg-emerald-500/20 border-emerald-500/40' },
+  IN_TRANSIT: { label: 'יצא לדרך / בנסיעה', icon: '🚛', colorClass: 'text-cyan-400 bg-cyan-500/20 border-cyan-500/40' },
+  DELIVERED: { label: 'סופק ונפרק באתר', icon: '📦', colorClass: 'text-green-400 bg-green-500/20 border-green-500/40' },
+  HOLD: { label: 'מושהה בבירור', icon: '⚠️', colorClass: 'text-yellow-400 bg-yellow-500/20 border-yellow-500/40' },
+  CANCELLED: { label: 'מבוטל', icon: '❌', colorClass: 'text-red-400 bg-red-500/20 border-red-500/40' },
+};
+

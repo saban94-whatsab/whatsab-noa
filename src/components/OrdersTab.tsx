@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
-import { Package, Truck, Navigation, Copy, Check, AlertTriangle, MessageSquare, Sparkles, Filter, Plus } from 'lucide-react';
+import { Package, Truck, Navigation, Copy, Check, AlertTriangle, MessageSquare, Sparkles, Filter, Send, RefreshCw } from 'lucide-react';
 import { useWhatsAppStore, formatWhatsAppOutboundTemplate } from '../store/useWhatsAppStore';
+import { OrderStatus, ORDER_STATUS_LABELS } from '../types';
 
 export const OrdersTab: React.FC = () => {
-  const { orders, processGroupOrderMessage, simulateIncomingOrder } = useWhatsAppStore();
+  const { orders, processGroupOrderMessage, simulateIncomingOrder, updateOrderStatus } = useWhatsAppStore();
   const [filterOrigin, setFilterOrigin] = useState<'all' | 'whatsapp' | 'comax'>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [statusMessageSent, setStatusMessageSent] = useState<string | null>(null);
 
   const filteredOrders = orders.filter((o) => {
     if (filterOrigin === 'all') return true;
@@ -17,6 +20,21 @@ export const OrdersTab: React.FC = () => {
     navigator.clipboard.writeText(text);
     setCopiedId(orderId);
     setTimeout(() => setCopiedId(null), 2500);
+  };
+
+  const handleStatusChange = async (orderNumber: string, newStatus: OrderStatus) => {
+    setUpdatingOrderId(orderNumber);
+    try {
+      const sent = await updateOrderStatus(orderNumber, newStatus, true);
+      if (sent) {
+        setStatusMessageSent(orderNumber);
+        setTimeout(() => setStatusMessageSent(null), 3000);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setUpdatingOrderId(null);
+    }
   };
 
   const handleTriggerSampleOrder = async () => {
@@ -200,11 +218,41 @@ export const OrdersTab: React.FC = () => {
                 </div>
 
                 {/* Blow & Pallet Status */}
-                <div className="bg-[#111b21] p-3 rounded-lg border border-[#2a3942] space-y-1 text-[#8696a0]">
-                  <span className="text-[#8696a0] font-semibold block border-b border-[#2a3942] pb-1">🛡️ אימות פקדונות וסטטוס:</span>
+                <div className="bg-[#111b21] p-3 rounded-lg border border-[#2a3942] space-y-2 text-[#8696a0]">
+                  <span className="text-[#8696a0] font-semibold block border-b border-[#2a3942] pb-1">🛡️ אימות פקדונות ועדכון סטטוס:</span>
                   <p>• <strong className="text-[#e9edef]">בלות:</strong> {ord.blowStatus}</p>
                   <p>• <strong className="text-[#e9edef]">משטחים:</strong> {ord.palletStatus}</p>
-                  <p>• <strong className="text-[#e9edef]">סטטוס לוגיסטי:</strong> <span className="text-[#00a884] font-bold">{ord.status}</span></p>
+                  
+                  {/* Interactive Order Status Dropdown */}
+                  <div className="pt-1.5 border-t border-[#2a3942] space-y-1.5">
+                    <label className="block text-[11px] font-bold text-[#e9edef]">📌 עדכן סטטוס סידור (נשמר ב-Storage + נשלח לוואטסאפ):</label>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={ord.status in ORDER_STATUS_LABELS ? ord.status : 'APPROVED'}
+                        onChange={(e) => handleStatusChange(ord.orderNumber, e.target.value as OrderStatus)}
+                        disabled={updatingOrderId === ord.orderNumber}
+                        className="bg-[#202c33] border border-[#00a884]/40 text-[#e9edef] font-bold text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#00a884] w-full"
+                        id={`select-status-${ord.orderNumber}`}
+                      >
+                        {Object.entries(ORDER_STATUS_LABELS).map(([key, info]) => (
+                          <option key={key} value={key}>
+                            {info.icon} {info.label}
+                          </option>
+                        ))}
+                      </select>
+
+                      {updatingOrderId === ord.orderNumber && (
+                        <RefreshCw className="w-4 h-4 text-[#00a884] animate-spin shrink-0" />
+                      )}
+                    </div>
+
+                    {statusMessageSent === ord.orderNumber && (
+                      <div className="text-[11px] text-emerald-400 font-bold flex items-center gap-1 bg-emerald-950/60 p-1.5 rounded border border-emerald-800">
+                        <Send className="w-3 h-3" />
+                        <span>נשלח בהצלחה לקבוצת עדכונים נועה!</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

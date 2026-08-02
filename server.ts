@@ -439,6 +439,31 @@ app.post('/api/google-sheets/sync', async (req: Request, res: Response) => {
   }
 });
 
+// Proxy endpoint for Google Apps Script GET requests to avoid browser CORS/redirect issues
+app.get('/api/sheets-fetch', async (req: Request, res: Response) => {
+  const tabName = req.query.tab ? String(req.query.tab) : 'לוג_הזמנות_מערכת';
+  const targetUrl = `${GAS_WEBHOOK_URL}?tab=${encodeURIComponent(tabName)}`;
+
+  try {
+    const gasRes = await fetch(targetUrl, { method: 'GET' });
+    if (!gasRes.ok) {
+      res.json({ success: false, data: [] });
+      return;
+    }
+    const text = await gasRes.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = [];
+    }
+    res.json({ success: true, data });
+  } catch (err) {
+    console.warn('[Sheets Proxy] Note: GAS fetch returned non-JSON or unreachable:', err);
+    res.json({ success: false, data: [], error: String(err) });
+  }
+});
+
 // Exact Outbound WhatsApp Template Generator Endpoint
 app.post('/api/template/outbound', (req: Request, res: Response) => {
   try {

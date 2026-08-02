@@ -21,17 +21,31 @@ const GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbyQUaDDWSiG6osV
  */
 export async function fetchLiveLogisticsDictionary(): Promise<LogisticsDictionaryItem[]> {
   try {
-    const response = await fetch(`${GAS_WEBHOOK_URL}?tab=מילון_לוגסטי`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
+    let rows: any[] = [];
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    // ניסיון ראשון: שליפה דרך API proxy בשרת למניעת בעיות CORS והפניות בבדפדפן
+    try {
+      const proxyRes = await fetch(`/api/sheets-fetch?tab=${encodeURIComponent('מילון_לוגסטי')}`);
+      if (proxyRes.ok) {
+        const proxyJson = await proxyRes.json();
+        if (proxyJson.data && Array.isArray(proxyJson.data)) {
+          rows = proxyJson.data;
+        } else if (Array.isArray(proxyJson)) {
+          rows = proxyJson;
+        }
+      }
+    } catch {
+      // Proxy failed or not running in dev server, fallback to direct fetch
     }
 
-    const rawData = await response.json();
-    const rows = Array.isArray(rawData) ? rawData : (rawData?.data || []);
+    // ניסיון שני: שליפה ישירה מ-GAS (ללא כותרת Content-Type שמפעילה preflight CORS)
+    if (rows.length === 0) {
+      const directRes = await fetch(`${GAS_WEBHOOK_URL}?tab=${encodeURIComponent('מילון_לוגסטי')}`, { method: 'GET' });
+      if (directRes.ok) {
+        const rawData = await directRes.json();
+        rows = Array.isArray(rawData) ? rawData : (rawData?.data || []);
+      }
+    }
 
     // המרת הנתונים מהגליון למבנה מילון לוגיסטי עבור נועה
     return rows.map((row: any) => ({
@@ -43,7 +57,7 @@ export async function fetchLiveLogisticsDictionary(): Promise<LogisticsDictionar
       unitPrice: Number(row['מחיר'] || row['unitPrice'] || 0),
     })).filter((item: LogisticsDictionaryItem) => item.sku !== '' && item.productName !== '');
   } catch (error) {
-    console.error('❌ שגיאה בשליפת מילון לוגיסטי בזמן אמת מהגליון:', error);
+    console.warn('⚠️ שילוב נתוני מילון מ-Sheets אינו זמין כעת (משתמש בנתונים שמורים):', error);
     return []; // במקרה של תקלה ברשת מוחזר מערך ריק מבוטח
   }
 }
@@ -55,17 +69,31 @@ export async function fetchLiveLogisticsDictionary(): Promise<LogisticsDictionar
  */
 export async function fetchLiveOrderLogAndCustomers(): Promise<{ orders: OrderRecord[]; customers: CustomerRecord[] }> {
   try {
-    const response = await fetch(`${GAS_WEBHOOK_URL}?tab=${encodeURIComponent('לוג_הזמנות_מערכת')}`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
+    let rows: any[] = [];
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    // ניסיון ראשון: שליפה דרך API proxy בשרת למניעת בעיות CORS והפניות בדפדפן
+    try {
+      const proxyRes = await fetch(`/api/sheets-fetch?tab=${encodeURIComponent('לוג_הזמנות_מערכת')}`);
+      if (proxyRes.ok) {
+        const proxyJson = await proxyRes.json();
+        if (proxyJson.data && Array.isArray(proxyJson.data)) {
+          rows = proxyJson.data;
+        } else if (Array.isArray(proxyJson)) {
+          rows = proxyJson;
+        }
+      }
+    } catch {
+      // Proxy failed or not running in dev server, fallback to direct fetch
     }
 
-    const json = await response.json();
-    const rows = Array.isArray(json) ? json : (json?.data || []);
+    // ניסיון שני: שליפה ישירה מ-GAS (ללא כותרת Content-Type שמפעילה preflight CORS)
+    if (rows.length === 0) {
+      const directRes = await fetch(`${GAS_WEBHOOK_URL}?tab=${encodeURIComponent('לוג_הזמנות_מערכת')}`, { method: 'GET' });
+      if (directRes.ok) {
+        const json = await directRes.json();
+        rows = Array.isArray(json) ? json : (json?.data || []);
+      }
+    }
 
     const allOrders: OrderRecord[] = [];
     const customerMap = new Map<string, CustomerRecord>();
@@ -180,7 +208,7 @@ export async function fetchLiveOrderLogAndCustomers(): Promise<{ orders: OrderRe
 
     return { orders: allOrders, customers: customersArray };
   } catch (error) {
-    console.error('❌ שגיאה בשליפת לוג הזמנות מערכת ותיקי לקוחות:', error);
+    console.warn('⚠️ שילוב לוג הזמנות מ-Sheets אינו זמין כעת (משתמש בנתונים שמורים):', error);
     return { orders: [], customers: [] };
   }
 }
