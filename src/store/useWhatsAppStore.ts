@@ -1,8 +1,19 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Contact, Message, MessageStatus, SystemConfig, WebhookLog, ProductItem, CustomerRecord, LogisticsDictionaryItem, OrderRecord, LogisticsDiscrepancy, GROUP_JIDS } from '../types';
-import { INITIAL_CONFIG, INITIAL_CONTACTS, INITIAL_MESSAGES, INITIAL_CUSTOMERS, INITIAL_LOGISTICS_DICTIONARY, INITIAL_ORDERS, INITIAL_DISCREPANCIES } from '../data/initialData';
-import { playIncomingSound, playOutgoingSound } from '../utils/audio';
+import { 
+  INITIAL_CONFIG, 
+  INITIAL_CONTACTS, 
+  INITIAL_MESSAGES, 
+  INITIAL_CUSTOMERS, 
+  INITIAL_LOGISTICS_DICTIONARY, 
+  INITIAL_ORDERS, 
+  INITIAL_DISCREPANCIES,
+  fetchLiveOrderLogAndCustomers,
+  fetchLiveLogisticsDictionary,
+  mapDictionaryToProducts
+} from '../data/initialData';
+import { playIncomingSound, playOutgoingSound, triggerBrowserNotification } from '../utils/audio';
 import { syncOrderToGoogleSheets } from '../utils/googleSheetsSync';
 
 export function formatWhatsAppOutboundTemplate(order: OrderRecord): string {
@@ -57,6 +68,7 @@ interface WhatsAppState {
   activeFilter: 'all' | 'unread' | 'favorites' | 'groups';
   isSoundMuted: boolean;
   isSendingApi: boolean;
+  activeNewOrderToast: OrderRecord | null;
 
   // Actions
   setActiveChatId: (id: string) => void;
@@ -68,6 +80,8 @@ interface WhatsAppState {
   requestAdminAccess: () => void;
   setAdminTab: (tab: 'metrics' | 'analytics' | 'crm' | 'customers' | 'orders' | 'discrepancies' | 'dictionary' | 'prompt' | 'logs') => void;
   toggleSoundMuted: () => void;
+  dismissNewOrderToast: () => void;
+  simulateIncomingOrder: () => void;
 
   // Messages & Chat logic
   sendMessage: (chatId: string, text: string, type?: Message['type'], mediaUrl?: string, fileName?: string) => Promise<void>;
@@ -91,7 +105,8 @@ interface WhatsAppState {
   removeProduct: (id: string) => void;
   updateProduct: (id: string, product: Partial<ProductItem>) => void;
 
-  // Logs
+  // Logs & Sync
+  syncLiveSheetData: () => Promise<void>;
   addWebhookLog: (log: WebhookLog) => void;
   clearWebhookLogs: () => void;
   
@@ -110,20 +125,7 @@ export const useWhatsAppStore = create<WhatsAppState>()(
       logisticsDictionary: INITIAL_LOGISTICS_DICTIONARY,
       orders: INITIAL_ORDERS,
       discrepancies: INITIAL_DISCREPANCIES,
-      webhookLogs: [
-        {
-          id: 'log-1',
-          timestamp: new Date().toLocaleTimeString('he-IL'),
-          senderPhone: '0549876543',
-          senderName: 'משה כהן',
-          messageText: 'צריך דחוף 4 בות חול וסומסום לאתר ברמת גן קומה 3 מנוף',
-          autoReply: 'אהלן משה! 🔨 קיבלנו את הבקשה ל-4 באלות חול וסומסום לקומה 3 ברמת גן. מנוף זרוע בתיאום.',
-          noaResponse: 'אהלן משה! 🔨 קיבלנו את הבקשה ל-4 באלות חול וסומסום לקומה 3 ברמת גן.',
-          sentToWhatsapp: true,
-          status: 'success',
-          durationMs: 420,
-        },
-      ],
+      webhookLogs: [],
       isAdminOpen: false,
       isAdminAuthenticated: false,
       isPasscodeModalOpen: false,
@@ -132,6 +134,7 @@ export const useWhatsAppStore = create<WhatsAppState>()(
       activeFilter: 'all',
       isSoundMuted: false,
       isSendingApi: false,
+      activeNewOrderToast: null,
 
       setActiveChatId: (id: string) => {
         set((state) => ({
@@ -157,6 +160,44 @@ export const useWhatsAppStore = create<WhatsAppState>()(
       },
       setAdminTab: (tab) => set({ adminTab: tab }),
       toggleSoundMuted: () => set((state) => ({ isSoundMuted: !state.isSoundMuted })),
+      dismissNewOrderToast: () => set({ activeNewOrderToast: null }),
+      simulateIncomingOrder: () => {
+        const simOrderNum = Math.floor(6214600 + Math.random() * 900);
+        const simOrder: OrderRecord = {
+          orderNumber: String(simOrderNum),
+          customerName: 'קבלן הדמה - יצחק יצחקי (518999)',
+          customerPhone: '054-9876543',
+          origin: 'comax',
+          warehouse: '🏭 4 (החרש)',
+          address: 'רחוב הרצל 45, ראשון לציון',
+          driverName: 'סידור מנופים ח. סבן',
+          distance: '18.2 ק"מ (22 דקות)',
+          duration: '22 דקות',
+          wazeUrl: 'https://waze.com/ul?q=הרצל 45 ראשון לציון',
+          items: [
+            { sku: '11500', name: 'חול שק', quantity: 50, unit: 'יח\'', price: 15 },
+            { sku: '10015', name: 'בטון מהיר מוכן 25 ק"ג', quantity: 10, unit: 'יח\'', price: 42 },
+          ],
+          blowStatus: '✅ מאושר',
+          palletStatus: '✅ תקין',
+          status: 'מאושר',
+          timestamp: new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
+          formattedTemplate: 'נועה AI: הזמנה חדשה התקבלה מלוג הזמנות מערכת בגליון',
+        };
+
+        set((state) => ({
+          orders: [simOrder, ...state.orders],
+          activeNewOrderToast: simOrder,
+        }));
+
+        if (!get().isSoundMuted) {
+          triggerBrowserNotification(
+            `🚨 הזמנה חדשה התקבלה ב-Google Sheets! (#${simOrder.orderNumber})`,
+            `לקוח: ${simOrder.customerName} | כתובת: ${simOrder.address}`,
+            true
+          );
+        }
+      },
 
       updateMessageStatus: (chatId, messageId, status) => {
         set((state) => ({
@@ -797,6 +838,51 @@ export const useWhatsAppStore = create<WhatsAppState>()(
         }));
 
         return createdOrder;
+      },
+
+      syncLiveSheetData: async () => {
+        try {
+          set({ isSendingApi: true });
+          const { orders: liveOrders, customers: liveCustomers } = await fetchLiveOrderLogAndCustomers();
+          const liveDict = await fetchLiveLogisticsDictionary();
+          const liveProducts = mapDictionaryToProducts(liveDict);
+
+          const currentOrders = get().orders;
+          const currentOrderNums = new Set(currentOrders.map((o) => String(o.orderNumber)));
+
+          // Detect brand new orders coming from Google Sheets
+          const newOrdersFromSheets = liveOrders.filter(
+            (o) => !currentOrderNums.has(String(o.orderNumber))
+          );
+
+          // If currentOrders was not empty (i.e. app is already open/running) and new orders detected:
+          if (currentOrders.length > 0 && newOrdersFromSheets.length > 0) {
+            const newest = newOrdersFromSheets[0];
+            set({ activeNewOrderToast: newest });
+
+            if (!get().isSoundMuted) {
+              triggerBrowserNotification(
+                `🚨 הזמנה חדשה התקבלה ב-Google Sheets! (#${newest.orderNumber})`,
+                `לקוח: ${newest.customerName} | כתובת: ${newest.address || 'לא צוינה'}`,
+                true
+              );
+            }
+          }
+
+          set((state) => ({
+            orders: liveOrders.length > 0 ? liveOrders : state.orders,
+            customers: liveCustomers.length > 0 ? liveCustomers : state.customers,
+            logisticsDictionary: liveDict.length > 0 ? liveDict : state.logisticsDictionary,
+            config: {
+              ...state.config,
+              products: liveProducts.length > 0 ? liveProducts : state.config.products,
+            },
+            isSendingApi: false,
+          }));
+        } catch (err) {
+          console.error('❌ שגיאה בסנכרון נתונים חיים מהגליון:', err);
+          set({ isSendingApi: false });
+        }
       },
 
       addWebhookLog: (log) => {

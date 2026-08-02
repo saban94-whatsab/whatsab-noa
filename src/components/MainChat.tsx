@@ -11,7 +11,7 @@ export const MainChat: React.FC = () => {
 
   if (!activeContact) {
     return (
-      <main className="flex-1 h-full bg-[#222e35] flex flex-col items-center justify-center p-8 text-center select-none border-r border-[#222d34]">
+      <main className="hidden md:flex flex-1 h-full bg-[#222e35] flex-col items-center justify-center p-8 text-center select-none border-r border-[#222d34]">
         <div className="max-w-md flex flex-col items-center gap-4">
           <div className="w-24 h-24 rounded-full bg-[#111b21] border border-[#2a3942] flex items-center justify-center text-[#00a884] shadow-xl">
             <Building2 className="w-12 h-12" />
@@ -47,7 +47,7 @@ export const MainChat: React.FC = () => {
   }
 
   return (
-    <main className="flex-1 h-full flex flex-col bg-[#0b141a] relative overflow-hidden">
+    <main className={`${activeChatId ? 'flex' : 'hidden md:flex'} flex-1 h-full flex-col bg-[#0b141a] relative overflow-hidden`}>
       <MainChatHeader />
       <MessageList />
       <InputBar />

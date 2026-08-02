@@ -87,6 +87,8 @@ export interface CustomerRecord {
   createdAt: string;
   notes?: string;
   activeOrdersCount?: number;
+  totalSpent?: number;
+  orders?: OrderRecord[];
 }
 
 export interface LogisticsDictionaryItem {

@@ -47,7 +47,7 @@ export const Sidebar: React.FC = () => {
   };
 
   return (
-    <aside className="w-full md:w-[350px] lg:w-[380px] h-full bg-[#111b21] border-l border-white/10 flex flex-col shrink-0 select-none">
+    <aside className={`${activeChatId ? 'hidden md:flex' : 'flex'} w-full md:w-[350px] lg:w-[380px] h-full bg-[#111b21] border-l border-white/10 flex-col shrink-0 select-none`}>
       {/* Sidebar Header */}
       <header className="h-[60px] bg-[#202c33] px-4 flex items-center justify-between shrink-0 border-b border-white/5">
         {/* User Profile Avatar & Admin Trigger */}

@@ -1,17 +1,27 @@
 import React from 'react';
-import { Search, Bot, UserCheck, ShieldCheck, Phone, Video } from 'lucide-react';
+import { Search, Bot, UserCheck, ShieldCheck, Phone, Video, ArrowRight } from 'lucide-react';
 import { useWhatsAppStore } from '../store/useWhatsAppStore';
 
 export const MainChatHeader: React.FC = () => {
-  const { contacts, activeChatId, toggleContactAI, setIsAdminOpen, setAdminTab } = useWhatsAppStore();
+  const { contacts, activeChatId, setActiveChatId, toggleContactAI, setIsAdminOpen, setAdminTab } = useWhatsAppStore();
   const activeContact = contacts.find((c) => c.id === activeChatId);
 
   if (!activeContact) return null;
 
   return (
-    <header className="h-[60px] bg-[#202c33] flex items-center justify-between px-4 shrink-0 z-10 border-r border-white/5 border-b border-white/5 select-none">
+    <header className="h-[60px] bg-[#202c33] flex items-center justify-between px-3 md:px-4 shrink-0 z-10 border-r border-white/5 border-b border-white/5 select-none">
       {/* Contact Info */}
       <div className="flex items-center">
+        {/* Mobile Back Button */}
+        <button
+          onClick={() => setActiveChatId(null)}
+          className="p-1.5 text-[#8696a0] hover:text-[#e9edef] rounded-full hover:bg-[#2a3942] md:hidden ml-2 shrink-0 transition-colors"
+          title="חזרה לרשימת השיחות"
+          id="btn-chat-mobile-back"
+        >
+          <ArrowRight className="w-5 h-5 stroke-[2.2]" />
+        </button>
+
         <div className="relative shrink-0 ml-3">
           <img
             src={activeContact.avatar}

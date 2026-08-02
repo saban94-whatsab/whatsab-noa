@@ -5,6 +5,7 @@ import { AdminDashboardModal } from './components/AdminDashboardModal';
 import { PasswordModal } from './components/PasswordModal';
 import { MobileHamburgerMenu } from './components/MobileHamburgerMenu';
 import { OfflineBanner } from './components/OfflineBanner';
+import { NewOrderToast } from './components/NewOrderToast';
 import { useWhatsAppStore } from './store/useWhatsAppStore';
 
 export default function App() {
@@ -15,7 +16,19 @@ export default function App() {
     setIsPasscodeModalOpen,
     setIsAdminAuthenticated,
     requestAdminAccess,
+    syncLiveSheetData,
   } = useWhatsAppStore();
+
+  // Auto-sync live Google Sheet data (order log tab & customer folders) on mount and poll every 15 seconds
+  useEffect(() => {
+    syncLiveSheetData();
+
+    const interval = setInterval(() => {
+      syncLiveSheetData();
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [syncLiveSheetData]);
 
   // Keyboard shortcut Ctrl+Shift+A to toggle Admin Panel securely
   useEffect(() => {
@@ -33,6 +46,9 @@ export default function App() {
     <div className="w-screen h-screen bg-[#0b141a] flex flex-col overflow-hidden font-sans dir-rtl text-[#e9edef] antialiased select-none relative">
       {/* Offline Status & Sync Banner */}
       <OfflineBanner />
+
+      {/* Real-Time Incoming Order Toast Notification */}
+      <NewOrderToast />
 
       {/* Mobile Auto-Hiding Hamburger Drawer */}
       <MobileHamburgerMenu onOpenAdminAuth={requestAdminAccess} />

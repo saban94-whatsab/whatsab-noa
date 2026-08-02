@@ -3,7 +3,7 @@ import { Package, Truck, Navigation, Copy, Check, AlertTriangle, MessageSquare, 
 import { useWhatsAppStore, formatWhatsAppOutboundTemplate } from '../store/useWhatsAppStore';
 
 export const OrdersTab: React.FC = () => {
-  const { orders, processGroupOrderMessage } = useWhatsAppStore();
+  const { orders, processGroupOrderMessage, simulateIncomingOrder } = useWhatsAppStore();
   const [filterOrigin, setFilterOrigin] = useState<'all' | 'whatsapp' | 'comax'>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
@@ -79,15 +79,27 @@ export const OrdersTab: React.FC = () => {
           </div>
         </div>
 
-        <button
-          onClick={handleTriggerSampleOrder}
-          disabled={isSimulating}
-          className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-emerald-950/40 disabled:opacity-50"
-          id="btn-simulate-order"
-        >
-          <Sparkles className="w-4 h-4 animate-pulse" />
-          <span>{isSimulating ? 'מעבד הזמנה...' : 'הפעל סימולציית הזמנה בקבוצת הזמנות (JONI)'}</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={simulateIncomingOrder}
+            className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-lg flex items-center gap-2 transition-all shadow-md"
+            id="btn-simulate-sheet-notification"
+            title="הדמה קבלת הזמנה חדשה ב-Google Sheets (בדיקת התראה מקומית)"
+          >
+            <Sparkles className="w-4 h-4 text-amber-200" />
+            <span>התראת Google Sheets בלייב</span>
+          </button>
+
+          <button
+            onClick={handleTriggerSampleOrder}
+            disabled={isSimulating}
+            className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-emerald-950/40 disabled:opacity-50"
+            id="btn-simulate-order"
+          >
+            <Sparkles className="w-4 h-4 animate-pulse" />
+            <span>{isSimulating ? 'מעבד הזמנה...' : 'הפעל סימולציית הזמנה בקבוצת הזמנות (JONI)'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Orders List Grid */}

@@ -31,9 +31,10 @@ export async function fetchLiveLogisticsDictionary(): Promise<LogisticsDictionar
     }
 
     const rawData = await response.json();
+    const rows = Array.isArray(rawData) ? rawData : (rawData?.data || []);
 
     // המרת הנתונים מהגליון למבנה מילון לוגיסטי עבור נועה
-    return rawData.map((row: any) => ({
+    return rows.map((row: any) => ({
       sku: String(row['מק"ט'] || row['sku'] || '').trim(),
       productName: String(row['שם מוצר'] || row['productName'] || '').trim(),
       category: String(row['קטגוריה'] || row['category'] || 'כללי').trim(),
@@ -44,6 +45,143 @@ export async function fetchLiveLogisticsDictionary(): Promise<LogisticsDictionar
   } catch (error) {
     console.error('❌ שגיאה בשליפת מילון לוגיסטי בזמן אמת מהגליון:', error);
     return []; // במקרה של תקלה ברשת מוחזר מערך ריק מבוטח
+  }
+}
+
+/**
+ * פונקציה אסינכרונית לשליפת 'לוג_הזמנות_מערכת' בזמן אמת מ-Google Sheets,
+ * בניית תיקיות לקוחות לכל לקוח עם שם לקוח ומספר לקוח (Comax ID),
+ * ושיוך רטרואקטיבי של כל ההזמנות תחת תיקיית הלקוח.
+ */
+export async function fetchLiveOrderLogAndCustomers(): Promise<{ orders: OrderRecord[]; customers: CustomerRecord[] }> {
+  try {
+    const response = await fetch(`${GAS_WEBHOOK_URL}?tab=${encodeURIComponent('לוג_הזמנות_מערכת')}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const json = await response.json();
+    const rows = Array.isArray(json) ? json : (json?.data || []);
+
+    const allOrders: OrderRecord[] = [];
+    const customerMap = new Map<string, CustomerRecord>();
+
+    rows.forEach((row: any, idx: number) => {
+      const rawCustomerName = String(row['שם לקוח'] || '').trim();
+      if (!rawCustomerName) return;
+
+      // חילוץ שם לקוח ומספר לקוח בסוגריים (לדוגמה: "וגשל דאו(519205)")
+      const match = rawCustomerName.match(/^(.*?)(?:\((\d+)\))?$/);
+      let cleanName = rawCustomerName;
+      let customerNumber = '';
+
+      if (match) {
+        cleanName = match[1].trim();
+        customerNumber = match[2] ? match[2].trim() : '';
+      }
+
+      if (!customerNumber) {
+        const altMatch = rawCustomerName.match(/\((\d+)\)/);
+        if (altMatch) {
+          customerNumber = altMatch[1];
+          cleanName = rawCustomerName.replace(/\(\d+\)/, '').trim();
+        }
+      }
+
+      // פירוש פריטים מהטקסט המרובה שורות
+      const itemsText = String(row['פריטים'] || '');
+      const itemLines = itemsText.split('\n').filter((l) => l.trim().length > 0);
+      const parsedItems = itemLines.map((line) => {
+        const skuMatch = line.match(/מק"特:\s*([\w\d]+)/) || line.match(/מק"ט:\s*([\w\d]+)/);
+        const qtyMatch = line.match(/כמות:\s*(\d+)/);
+        const sku = skuMatch ? skuMatch[1] : '';
+        const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 1;
+
+        const parts = line.split('|');
+        let pName = line;
+        if (parts.length >= 2) {
+          pName = parts[1].replace(/📦/, '').trim();
+        } else {
+          pName = line.replace(/^\d+\.\s*/, '').trim();
+        }
+        return {
+          sku: sku || 'ללא מק"ט',
+          name: pName,
+          quantity: qty,
+          unit: 'יח\'',
+          price: 0,
+        };
+      });
+
+      const orderNumberStr = String(row['מספר הזמנה'] || `ORD-${1000 + idx}`);
+      const orderAmount = Number(row['סכום'] || 0);
+
+      const orderRecord: OrderRecord = {
+        orderNumber: orderNumberStr,
+        customerName: cleanName || rawCustomerName,
+        customerPhone: '054-0000000',
+        origin: 'comax',
+        warehouse: String(row['מחסן'] || 'מחסן ראשי (החרש)'),
+        address: String(row['כתובת אספקה'] || 'אתר פריקה'),
+        driverName: 'סידור מנופים ח. סבן',
+        distance: String(row['אימות מסלול הובלה'] || 'נבדק בתקן (24.1 ק"מ)'),
+        duration: '30 דק\'',
+        wazeUrl: `https://waze.com/ul?q=${encodeURIComponent(String(row['כתובת אספקה'] || 'תל אביב'))}`,
+        items: parsedItems,
+        blowStatus: String(row['פקדון בלות'] || 'תקין'),
+        palletStatus: String(row['פקדון משטחים'] || 'תקין'),
+        status: String(row['סטטוס'] || 'מאושר'),
+        timestamp: String(row['תאריך קליטה'] || new Date().toISOString()),
+        formattedTemplate: String(row['מסקנות נועה AI'] || ''),
+        discrepancyFlag: false,
+      };
+
+      allOrders.push(orderRecord);
+
+      // מפתח זיהוי ייחודי לתיקיית לקוח
+      const customerKey = customerNumber ? `${cleanName}_${customerNumber}` : cleanName;
+
+      if (!customerMap.has(customerKey)) {
+        const custId = customerNumber ? `CUST-${customerNumber}` : `CUST-${1000 + customerMap.size}`;
+        const createdDateStr = row['תאריך קליטה']
+          ? new Date(row['תאריך קליטה']).toLocaleDateString('he-IL')
+          : new Date().toLocaleDateString('he-IL');
+
+        customerMap.set(customerKey, {
+          id: custId,
+          name: cleanName || rawCustomerName,
+          comaxId: customerNumber ? customerNumber : 'ללא מספר קומקס',
+          phone: '054-0000000',
+          address: String(row['כתובת אספקה'] || 'אתר פריקה ראשי'),
+          creditLimit: '₪150,000',
+          currentBalance: '₪0',
+          driveFolderUrl: `https://drive.google.com/drive/search?q=${encodeURIComponent(cleanName)}`,
+          createdAt: createdDateStr,
+          notes: `תיק לקוח מסונכרן אוטומטית מתוך לוג הזמנות מערכת (קומקס)`,
+          activeOrdersCount: 0,
+          totalSpent: 0,
+          orders: [],
+        });
+      }
+
+      const cust = customerMap.get(customerKey)!;
+      cust.orders!.push(orderRecord);
+      cust.activeOrdersCount = (cust.activeOrdersCount || 0) + 1;
+      cust.totalSpent = (cust.totalSpent || 0) + orderAmount;
+      cust.currentBalance = `₪${cust.totalSpent.toLocaleString()}`;
+    });
+
+    const customersArray = Array.from(customerMap.values());
+    console.log(`✅ סונכרנו בהצלחה ${allOrders.length} הזמנות ו-${customersArray.length} תיקי לקוחות מתוך לוג הזמנות מערכת!`);
+
+    return { orders: allOrders, customers: customersArray };
+  } catch (error) {
+    console.error('❌ שגיאה בשליפת לוג הזמנות מערכת ותיקי לקוחות:', error);
+    return { orders: [], customers: [] };
   }
 }
 
