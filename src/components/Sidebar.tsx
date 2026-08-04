@@ -54,20 +54,17 @@ export const Sidebar: React.FC = () => {
         <div className="flex items-center gap-3">
           <button
             onClick={() => requestAdminAccess()}
-            className="relative group focus:outline-none flex items-center gap-2"
+            className="relative group focus:outline-none flex items-center gap-2.5"
             title="לחץ לפתיחת פאנל ניהול מוגן בסיסמה 1125"
             id="btn-profile-avatar-admin"
           >
-            <div className="w-10 h-10 rounded-full bg-[#8696a0] flex items-center justify-center overflow-hidden shrink-0">
-              <img
-                src="https://images.unsplash.com/photo-1541888946425-d0fbb186a5b7?w=150&auto=format&fit=crop&q=80"
-                alt="סידור ח. סבן"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-              />
+            <div className="w-9 h-9 rounded-lg bg-[#14161f] border border-[#00ffaa]/40 flex items-center justify-center shrink-0 shadow-sm">
+              <span className="font-display font-extrabold text-[#00ffaa] text-sm tracking-tight">NOA</span>
             </div>
-            <span className="text-xs font-bold bg-[#00a884]/20 text-[#00a884] px-2 py-0.5 rounded uppercase tracking-wider">
-              מנהל
-            </span>
+            <div className="text-right">
+              <div className="font-display font-extrabold text-xs text-[#00ffaa] tracking-wider leading-none">NOA_AI</div>
+              <div className="text-[9px] font-mono text-[#e0e6ed]/50 uppercase tracking-widest mt-0.5">H. SABAN v2.4</div>
+            </div>
           </button>
         </div>
 
@@ -252,6 +249,15 @@ export const Sidebar: React.FC = () => {
             );
           })
         )}
+      </div>
+
+      {/* System Status Footer */}
+      <div className="px-4 py-2.5 bg-[#0a0b10] border-t border-white/10 flex items-center justify-between text-[10px] font-mono shrink-0">
+        <span className="text-[#e0e6ed]/50 uppercase tracking-widest">SYSTEM_STATUS</span>
+        <span className="text-[#00ffaa] flex items-center gap-1.5 font-bold">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#00ffaa] animate-pulse"></span>
+          CONNECTED // FIREBASE_LIVE
+        </span>
       </div>
 
       {/* New Contact Dialog Modal */}

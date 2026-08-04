@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
-import { Sidebar } from './components/Sidebar';
-import { MainChat } from './components/MainChat';
+import { WhatsAppMirror } from './components/WhatsAppMirror';
 import { AdminDashboardModal } from './components/AdminDashboardModal';
 import { PasswordModal } from './components/PasswordModal';
 import { MobileHamburgerMenu } from './components/MobileHamburgerMenu';
@@ -55,8 +54,7 @@ export default function App() {
 
       {/* 100% WhatsApp Web Outer Canvas Container */}
       <div className="w-full flex-1 flex overflow-hidden max-w-[1700px] mx-auto shadow-2xl relative">
-        <Sidebar />
-        <MainChat />
+        <WhatsAppMirror />
       </div>
 
       {/* Protected Admin Passcode Auth Modal (Default PIN: 1125) */}
@@ -75,3 +73,4 @@ export default function App() {
     </div>
   );
 }
+

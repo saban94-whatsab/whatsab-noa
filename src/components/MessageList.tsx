@@ -73,13 +73,20 @@ export const MessageList: React.FC = () => {
                   : 'bg-[#202c33] text-[#e9edef] rounded-tl-none'
               }`}
             >
-              {/* Sender Tag Header if AI */}
-              {isAI && (
+              {/* Sender Tag Header if AI or Group Message */}
+              {isAI ? (
                 <div className="flex items-center gap-1 text-[11px] font-semibold text-[#00a884] mb-1">
                   <Bot className="w-3.5 h-3.5" />
                   <span>נועה AI (ח. סבן)</span>
                 </div>
-              )}
+              ) : (msg.isGroup || activeContact?.tags?.includes('קבוצת הזמנות') || activeContact?.phone.includes('@g.us')) ? (
+                <div className="flex items-center justify-between gap-2 text-[10px] text-[#00a884] font-semibold mb-1 pb-0.5 border-b border-white/10">
+                  <span className="bg-[#00a884]/20 text-[#00a884] px-1.5 py-0.2 rounded font-bold">
+                    👥 Group Order
+                  </span>
+                  <span>{msg.parsedClientName || msg.senderName || 'חבר קבוצה'}</span>
+                </div>
+              ) : null}
 
               {/* Message Content */}
               {msg.type === 'audio' ? (

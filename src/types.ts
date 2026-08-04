@@ -15,6 +15,12 @@ export interface Message {
   audioDuration?: number; // in seconds
   fileName?: string;
   fileSize?: string;
+  isGroup?: boolean;
+  groupId?: string;
+  mentionedJids?: string[];
+  parsedClientName?: string;
+  parsedClientPhone?: string;
+  parsedItems?: Array<{ sku?: string; name: string; quantity: number; unit?: string }>;
 }
 
 export interface Contact {

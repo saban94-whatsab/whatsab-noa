@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+:root {
+  --bg: #0a0b10;
+  --surface: #14161f;
+  --ink: #e0e6ed;
+  --ink-dim: rgba(224, 230, 237, 0.5);
+  --accent: #00ffaa;
+  --border: rgba(255, 255, 255, 0.08);
+  --font-display: 'Syne', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-body: 'Inter', sans-serif;
+}
+
 @layer utilities {
   .dir-rtl {
     direction: rtl;
@@ -8,34 +20,100 @@
     direction: ltr;
   }
 
-  /* Custom High Density WhatsApp Dark Scrollbars */
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+
+  .font-body {
+    font-family: var(--font-body);
+  }
+
+  /* Custom High Density Cyber Control Center Scrollbars */
   ::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
+    width: 4px;
+    height: 4px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #374045;
-    border-radius: 3px;
+    background: var(--accent);
+    border-radius: 10px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #00a884;
+    background: #00cc88;
   }
 }
 
+/* Control Center Card & Components */
+.cyber-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  position: relative;
+}
+
+.cyber-card::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent);
+  opacity: 0.8;
+}
+
+.status-badge {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  padding: 4px 10px;
+  border-radius: 2px;
+  background: rgba(0, 255, 170, 0.1);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  text-transform: uppercase;
+}
+
+.meta-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+
+.tech-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.tech-dots .dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.tech-dots .dot.active {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+}
+
 ::selection {
-  background-color: #00a884;
-  color: #ffffff;
+  background-color: var(--accent);
+  color: var(--bg);
 }
 
 body {
   margin: 0;
   padding: 0;
-  background-color: #0b141a;
-  color: #e9edef;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

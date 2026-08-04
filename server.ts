@@ -10,7 +10,7 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
 
 // Firebase JONI URL from prompt default
 const JONI_FIREBASE_URL = process.env.FIREBASE_JONI_URL || 'https://saban-ai-drive-default-rtdb.europe-west1.firebasedatabase.app/joni/send.json';
@@ -71,7 +71,7 @@ async function generateNoaResponse(
     isStoreInquiryOnly(messageText) ||
     detectMissingOrderDetails(messageText).isMissing ||
     (messageText && messageText.includes('.vcf')) ||
-    engineResult.replyText !== `שלום, הגעת ל${SYSTEM_CONFIG.COMPANY_NAME} (מחלקת הזמנות). 🏗️\nאיך נוכל לעזור היום? מומלץ לפרט את רשימת החומרים, כתובת ואיש קשר בשטח.`
+    engineResult.replyText !== `היי, במה אוכל לסייע לך היום בח. סבן? 👍`
   ) {
     return engineResult.replyText;
   }
@@ -197,13 +197,310 @@ app.get('/api/health', (req: Request, res: Response) => {
   });
 });
 
+// Audio Voice Message Transcription via Gemini API Endpoint
+app.post('/api/transcribe-audio', async (req: Request, res: Response) => {
+  try {
+    const { audioBase64, mimeType = 'audio/webm' } = req.body;
+    if (!audioBase64) {
+      return res.status(400).json({ error: 'חסרה הקלטה קולית בבקשה' });
+    }
+
+    // Strip header prefix if present (e.g., data:audio/webm;base64,...)
+    const cleanBase64 = audioBase64.replace(/^data:audio\/[a-zA-Z0-9]+;base64,/, '');
+
+    const ai = getGemini();
+    if (!ai) {
+      return res.status(500).json({ error: 'Gemini API is not configured or missing key.' });
+    }
+
+    const cleanMime = mimeType.split(';')[0] || 'audio/webm';
+    const modelsToTry = ['gemini-3.6-flash', 'gemini-flash-latest'];
+    let transcript = '';
+    let lastError = null;
+
+    for (const modelName of modelsToTry) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: cleanMime,
+                  data: cleanBase64,
+                },
+              },
+              {
+                text: 'תמלל את ההקלטה הקולית הזו בעברית באופן תכליתי ומדויק לטקסט בלבד. החזר אך ורק את טקסט התמליל, ללא הסברים, ללא תוספות וללא מרכאות.',
+              },
+            ],
+          },
+        });
+
+        if (response.text) {
+          transcript = response.text.trim();
+          break;
+        }
+      } catch (err) {
+        lastError = err;
+        console.warn(`[Gemini Audio Transcription] Failed with model ${modelName}:`, err);
+      }
+    }
+
+    if (!transcript && lastError) {
+      return res.status(500).json({ error: 'תקלה בתמלול הקלטה קולית באמצעות Gemini API', details: String(lastError) });
+    }
+
+    return res.json({ transcript, success: true });
+  } catch (error) {
+    console.error('[Audio Transcription Error]:', error);
+    return res.status(500).json({ error: 'שגיאה בעיבוד הקלטה קולית', details: String(error) });
+  }
+});
+
 // Group JID definitions
 const GROUP_JIDS = {
   UPDATES_ALERTS: '120363428842730390@g.us', // עדכונים סידור נועה
   CUSTOMER_ORDERS: '120363390702096083@g.us', // קבוצת הזמנות לקוחות
 };
 
-// Helper to construct exact Outbound WhatsApp Template according to Section 4
+// Helper to extract sub-client name and phone number from text body
+function extractSubClientDetails(text: string): { name?: string; phone?: string } {
+  if (!text) return {};
+  const phoneMatch = text.match(/(?:\+972|05\d)[-]?\d{1,2}[-]?\d{3}[-]?\d{4}|05\d{8}/);
+  const phone = phoneMatch ? phoneMatch[0].replace(/[-]/g, '') : undefined;
+  
+  const nameMatch = text.match(/(?:שם|לקוח|איש קשר|בשם|עבור|מאת|לכבוד):\s*([א-ת\s]+)/i) || text.match(/([א-ת]+\s+[א-ת]+)\s*(?:נייד|טלפון|05)/);
+  const name = nameMatch ? nameMatch[1].trim() : undefined;
+  
+  return { name, phone };
+}
+
+// Dedicated Local Listener Event Endpoint (for C:\ap94\index.js and group message payloads)
+app.post('/api/listener/event', async (req: Request, res: Response) => {
+  const {
+    isGroup: rawIsGroup,
+    groupId: rawGroupId,
+    from,
+    mentionedJids: rawMentionedJids,
+    parsedClientName: rawClientName,
+    parsedClientPhone: rawClientPhone,
+    messageText = '',
+    senderName = 'חבר קבוצה',
+    senderPhone = '',
+  } = req.body;
+
+  const groupId = rawGroupId || from || GROUP_JIDS.CUSTOMER_ORDERS;
+  const isGroup = rawIsGroup ?? (typeof groupId === 'string' && groupId.endsWith('@g.us'));
+
+  // Parse sub-client details from message body if not explicitly provided
+  const extracted = extractSubClientDetails(messageText);
+  const parsedClientName = rawClientName || extracted.name || senderName;
+  const parsedClientPhone = rawClientPhone || extracted.phone || senderPhone;
+
+  let mentionedJids: string[] = [];
+  if (Array.isArray(rawMentionedJids)) {
+    mentionedJids = rawMentionedJids;
+  } else if (typeof rawMentionedJids === 'string') {
+    mentionedJids = [rawMentionedJids];
+  } else if (parsedClientPhone) {
+    const cleanPhone = parsedClientPhone.replace(/[\+\-\s]/g, '');
+    const formattedJid = cleanPhone.startsWith('0') ? `972${cleanPhone.slice(1)}@c.us` : `${cleanPhone}@c.us`;
+    mentionedJids = [formattedJid];
+  }
+
+  console.log(`[Listener Event] Processing group event for ${groupId}. Sub-client: ${parsedClientName} (${parsedClientPhone})`);
+
+  try {
+    // Generate order record or AI response
+    let autoReply = '';
+    let orderRecord = null;
+
+    if (groupId === GROUP_JIDS.CUSTOMER_ORDERS || groupId.includes('120363390702096083')) {
+      const orderNumber = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
+      orderRecord = {
+        orderNumber,
+        customerName: parsedClientName,
+        customerPhone: parsedClientPhone || '052-6688768',
+        groupJid: groupId,
+        origin: 'whatsapp' as const,
+        warehouse: 'מחסן החרש',
+        address: 'אתר חלוקה - קבוצה',
+        driverName: 'אלי שרעבי',
+        distance: '14.2 ק"מ',
+        duration: '20 דקות',
+        wazeUrl: 'https://waze.com/ul?ll=32.0853,34.7818&navigate=yes',
+        items: [
+          { sku: '11500', name: 'פלטות גבס לבן/ירוק 12.5 מ"מ', quantity: 20, unit: 'יח\'' },
+          { sku: '11505', name: 'ניצבים / מסלולים 7 ס"מ', quantity: 15, unit: 'יח\'' },
+          { sku: '10001', name: 'חול ים / חול מחצבה בבאלה', quantity: 2, unit: 'באלה' },
+        ],
+        blowStatus: 'מאושר (2 בלות)',
+        palletStatus: 'תקין',
+        status: 'בתהליך אספקה',
+      };
+      autoReply = buildWhatsAppOutboundTemplate(orderRecord);
+    } else {
+      autoReply = await generateNoaResponse(messageText, parsedClientName);
+    }
+
+    // Forward to JONI Realtime DB with group tags & mentions
+    let joniStatus = 'skipped';
+    try {
+      const joniPayload = {
+        recipientPhone: groupId,
+        groupJid: groupId,
+        senderPhone,
+        senderName: parsedClientName,
+        messageText,
+        autoReply,
+        mentions: mentionedJids,
+        isGroup: true,
+        parsedClientName,
+        parsedClientPhone,
+        timestamp: new Date().toISOString(),
+        source: 'SabanOS Listener Payload Handler',
+      };
+
+      const firebaseRes = await fetch(JONI_FIREBASE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(joniPayload),
+      });
+      joniStatus = firebaseRes.ok ? 'sent_to_joni' : `joni_error_${firebaseRes.status}`;
+    } catch (jErr) {
+      console.warn('JONI Firebase sync warning:', jErr);
+    }
+
+    // Sync order row to Google Sheets
+    await sendOrderToGoogleSheets({
+      orderNumber: orderRecord?.orderNumber,
+      customerName: parsedClientName,
+      customerPhone: parsedClientPhone || groupId,
+      groupJid: groupId,
+      messageText,
+      autoReply,
+      itemsText: orderRecord ? 'פלטות גבס, ניצבים ומסלולים, בלות חול' : messageText,
+    });
+
+    // Store in internal log
+    backendLogs.unshift({
+      id: `listener-log-${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString('he-IL'),
+      senderPhone: groupId,
+      senderName: `${parsedClientName} (קבוצה)`,
+      messageText,
+      autoReply,
+      sentToWhatsapp: true,
+      joniSync: joniStatus,
+      sheetsSync: 'synced',
+    });
+
+    res.json({
+      success: true,
+      isGroup,
+      groupId,
+      parsedClientName,
+      parsedClientPhone,
+      mentionedJids,
+      autoReply,
+      orderRecord,
+      joniStatus,
+    });
+  } catch (err) {
+    console.error('Error in /api/listener/event:', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// Outbound Manual Response Box Endpoint (Dispatches messages to group chats via JONI)
+app.post('/api/chat/send-group-message', async (req: Request, res: Response) => {
+  const {
+    groupId = GROUP_JIDS.CUSTOMER_ORDERS,
+    messageText,
+    mentions = [],
+    tagClientPhone,
+    clientName,
+  } = req.body;
+
+  if (!messageText || !messageText.trim()) {
+    res.status(400).json({ success: false, error: 'messageText is required' });
+    return;
+  }
+
+  try {
+    let finalMessageText = messageText.trim();
+    let finalMentions: string[] = Array.isArray(mentions) ? [...mentions] : [];
+
+    // Format client phone tag e.g., @+972526688768 if requested
+    if (tagClientPhone) {
+      const cleanPhone = tagClientPhone.replace(/[\+\-\s]/g, '');
+      const formattedNumber = cleanPhone.startsWith('0') ? `972${cleanPhone.slice(1)}` : cleanPhone;
+      const jid = `${formattedNumber}@c.us`;
+      if (!finalMentions.includes(jid)) {
+        finalMentions.push(jid);
+      }
+
+      const tagLabel = `@+${formattedNumber}`;
+      if (!finalMessageText.includes(tagLabel) && !finalMessageText.includes(`@${clientName}`)) {
+        finalMessageText = `${tagLabel} ${finalMessageText}`;
+      }
+    }
+
+    console.log(`[JONI Outbound Group Dispatch] Sending message to group ${groupId}: "${finalMessageText}"`);
+
+    // Dispatch payload to JONI Firebase Realtime DB endpoint
+    const joniPayload = {
+      recipientPhone: groupId,
+      groupJid: groupId,
+      senderName: 'סידור ח. סבן / מנהל',
+      messageText: finalMessageText,
+      mentions: finalMentions,
+      timestamp: new Date().toISOString(),
+      source: 'SabanOS PWA Dashboard Group Dispatcher',
+    };
+
+    let joniStatus = 'sent';
+    try {
+      const firebaseRes = await fetch(JONI_FIREBASE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(joniPayload),
+      });
+      if (!firebaseRes.ok) {
+        joniStatus = `status_${firebaseRes.status}`;
+      }
+    } catch (fErr) {
+      console.warn('Warning sending group message to JONI:', fErr);
+      joniStatus = 'network_error_fallback_simulated';
+    }
+
+    // Log internally
+    backendLogs.unshift({
+      id: `outbound-group-${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString('he-IL'),
+      senderPhone: groupId,
+      senderName: 'מנהל סידור (Outbound)',
+      messageText: finalMessageText,
+      autoReply: 'הודעת קבוצה נשלחה מנהלתית',
+      sentToWhatsapp: true,
+      joniSync: joniStatus,
+      sheetsSync: 'skipped',
+    });
+
+    res.json({
+      success: true,
+      groupId,
+      messageText: finalMessageText,
+      mentions: finalMentions,
+      joniStatus,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Error in /api/chat/send-group-message:', err);
+    res.status(500).json({ success: false, error: 'Failed to send group message' });
+  }
+});
 function buildWhatsAppOutboundTemplate(order: {
   orderNumber: string;
   customerName: string;
@@ -251,6 +548,371 @@ ${itemsList}
 
 sent via JONI`;
 }
+
+// Server-Side In-Memory Cache for Modes & Customer Profiles
+const chatModes: Record<string, 'auto' | 'manual'> = {
+  '972508861080': 'auto',
+  '0508861080': 'auto',
+};
+
+const customerProfiles: Record<string, {
+  customerId: string;
+  phone: string;
+  name: string;
+  email: string;
+  addresses: string[];
+  groupName: string;
+  comaxId: string;
+  notes: string;
+  updatedAt: string;
+}> = {
+  '0526688768': {
+    customerId: 'CUST-519205',
+    phone: '0526688768',
+    name: 'חיים עמרם - קבלן גבס',
+    email: 'haim.amram@saban.co.il',
+    addresses: ['אתר בנייה - הרצל 45, ראשון לציון', 'מחסן ראשי - אזה"ת חולון'],
+    groupName: 'קבוצת הובלות מרכז (ח.סבן)',
+    comaxId: '519205',
+    notes: 'לקוח VIP - דורש פריקה במנוף 18 מטר בלבד',
+    updatedAt: new Date().toISOString(),
+  }
+};
+
+// 1. GET /api/chat/sync: Returns active chats, profiles, and live auto/manual status
+app.get('/api/chat/sync', (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    serverTime: new Date().toISOString(),
+    chatModes,
+    customerProfiles,
+    activeLogsCount: backendLogs.length,
+    listenerStatus: {
+      localServerActive: true,
+      noaPhone: '972508861080',
+      gasWebhookConfigured: Boolean(GAS_WEBHOOK_URL),
+      joniUrlConfigured: Boolean(JONI_FIREBASE_URL),
+    }
+  });
+});
+
+// Dedicated Vercel & Local Sync Endpoint: /api/chat/respond
+app.get('/api/chat/respond', (req: Request, res: Response) => {
+  res.json({
+    status: 'online',
+    endpoint: '/api/chat/respond',
+    description: 'Local WhatsApp Web listener sync endpoint (C:\\ap94 PM2 noa-whatsapp-server)',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.post('/api/chat/respond', async (req: Request, res: Response) => {
+  const {
+    id,
+    phone,
+    senderPhone: rawPhone,
+    senderName = 'לקוח וואטסאפ',
+    isGroup = false,
+    groupId = null,
+    incomingMessage,
+    messageText,
+    timestamp = new Date().toISOString(),
+    source = 'local_ap94_listener',
+  } = req.body || {};
+
+  const cleanPhone = (phone || rawPhone || '').replace(/[^0-9]/g, '');
+  const actualMessage = incomingMessage || messageText || '';
+
+  if (!cleanPhone || !actualMessage) {
+    return res.status(400).json({ success: false, error: 'Phone and incomingMessage are required' });
+  }
+
+  try {
+    // Generate AI response if in auto mode
+    const mode = chatModes[cleanPhone] || 'auto';
+    let replyText = '';
+    if (mode === 'auto') {
+      replyText = await generateNoaResponse(actualMessage, senderName);
+    } else {
+      replyText = `שלום ${senderName}, הודעתך הועברה למנהל הסידור למענה ידני.`;
+    }
+
+    // Attach profile context
+    const profile = customerProfiles[cleanPhone] || {
+      customerId: `CUST-${cleanPhone.slice(-6)}`,
+      phone: cleanPhone,
+      name: senderName,
+      email: '',
+      addresses: ['אתר אספקה ראשי'],
+      groupName: 'קבוצת הובלות מרכז (ח.סבן)',
+      comaxId: '519205',
+      notes: '',
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Store in backend log
+    backendLogs.unshift({
+      id: id || `msg-sync-${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString('he-IL'),
+      senderPhone: cleanPhone,
+      senderName,
+      messageText: actualMessage,
+      autoReply: replyText,
+      sentToWhatsapp: true,
+      joniSync: 'sent',
+      sheetsSync: 'synced',
+    });
+
+    // Forward to JONI Realtime DB asynchronously
+    fetch(JONI_FIREBASE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: id || `msg_${Date.now()}`,
+        phone: cleanPhone,
+        recipientPhone: `${cleanPhone}@c.us`,
+        senderName,
+        messageText: actualMessage,
+        autoReply: replyText,
+        isGroup,
+        groupId,
+        timestamp,
+        source,
+      }),
+    }).catch((err) => console.warn('JONI dispatch in /api/chat/respond warn:', err));
+
+    // Forward to GAS Webhook
+    sendOrderToGoogleSheets({
+      customerName: senderName,
+      customerPhone: cleanPhone,
+      messageText: actualMessage,
+      autoReply: replyText,
+      status: 'התקבל ב-C:\\ap94',
+    }).catch((err) => console.warn('GAS sync in /api/chat/respond warn:', err));
+
+    res.json({
+      success: true,
+      response: replyText,
+      replyText,
+      payload: {
+        id: id || `msg_${Date.now()}`,
+        phone: cleanPhone,
+        senderName,
+        incomingMessage: actualMessage,
+        autoReply: replyText,
+        isGroup,
+        groupId,
+        timestamp,
+        source,
+      },
+      context: {
+        comaxId: profile.comaxId || '519205',
+        customerName: profile.name,
+        addresses: profile.addresses,
+        verifiedOrdersCount: 2,
+      },
+    });
+  } catch (err) {
+    console.error('Error in POST /api/chat/respond:', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// 2. POST /api/chat/mode: Toggles auto vs manual reply status per phone number
+app.post('/api/chat/mode', (req: Request, res: Response) => {
+  const { phone, mode, isAIEnabled } = req.body;
+  if (!phone) {
+    return res.status(400).json({ success: false, error: 'Phone number is required' });
+  }
+
+  const cleanPhone = phone.replace(/[^0-9]/g, '');
+  const targetMode = mode ? mode : (isAIEnabled === false ? 'manual' : 'auto');
+  chatModes[cleanPhone] = targetMode;
+
+  console.log(`[Chat Mode Toggle] Changed mode for ${cleanPhone} to ${targetMode}`);
+  res.json({
+    success: true,
+    phone: cleanPhone,
+    mode: targetMode,
+    isAIEnabled: targetMode === 'auto',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// 3. POST /api/chat/send-manual: Outbound manual dispatch trigger through local server / JONI
+app.post('/api/chat/send-manual', async (req: Request, res: Response) => {
+  const { phone, messageText, senderName = 'מנהל סידור (אדמין)' } = req.body;
+  if (!phone || !messageText) {
+    return res.status(400).json({ success: false, error: 'Phone and messageText are required' });
+  }
+
+  const cleanPhone = phone.replace(/[^0-9]/g, '');
+  const targetJid = cleanPhone.includes('@') ? cleanPhone : `${cleanPhone}@c.us`;
+
+  try {
+    // Dispatch to JONI Realtime DB for local listener dispatch
+    const joniPayload = {
+      recipientPhone: targetJid,
+      phone: cleanPhone,
+      senderName,
+      messageText,
+      timestamp: new Date().toISOString(),
+      direction: 'outbound_manual',
+      source: 'Admin Manual WhatsApp Dispatcher',
+    };
+
+    let joniStatus = 'sent';
+    try {
+      const joniRes = await fetch(JONI_FIREBASE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(joniPayload),
+      });
+      if (!joniRes.ok) {
+        joniStatus = `status_${joniRes.status}`;
+      }
+    } catch (jErr) {
+      console.warn('JONI dispatch warning in send-manual:', jErr);
+      joniStatus = 'network_fallback';
+    }
+
+    // Force mode to manual on manual intervention
+    chatModes[cleanPhone] = 'manual';
+
+    // Log internally
+    backendLogs.unshift({
+      id: `manual-outbound-${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString('he-IL'),
+      senderPhone: cleanPhone,
+      senderName,
+      messageText,
+      autoReply: 'מענה ידני נשלח מהאדמין',
+      sentToWhatsapp: true,
+      joniSync: joniStatus,
+      sheetsSync: 'skipped',
+    });
+
+    res.json({
+      success: true,
+      phone: cleanPhone,
+      messageText,
+      joniStatus,
+      mode: 'manual',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Error in /api/chat/send-manual:', err);
+    res.status(500).json({ success: false, error: 'Failed to dispatch manual message' });
+  }
+});
+
+// 4. POST /api/customer/update-profile: Saves enriched customer metadata
+app.post('/api/customer/update-profile', (req: Request, res: Response) => {
+  const { phone, customerId, name, email, addresses, groupName, comaxId, notes } = req.body;
+  if (!phone) {
+    return res.status(400).json({ success: false, error: 'Phone is required' });
+  }
+
+  const cleanPhone = phone.replace(/[^0-9]/g, '');
+  const existing = customerProfiles[cleanPhone] || {
+    customerId: customerId || `CUST-${cleanPhone.slice(-6)}`,
+    phone: cleanPhone,
+    name: name || 'לקוח',
+    email: '',
+    addresses: [],
+    groupName: 'קבוצת לקוחות כללית',
+    comaxId: '',
+    notes: '',
+    updatedAt: new Date().toISOString(),
+  };
+
+  const updatedProfile = {
+    ...existing,
+    customerId: customerId || existing.customerId,
+    name: name || existing.name,
+    email: email !== undefined ? email : existing.email,
+    addresses: Array.isArray(addresses) ? addresses : (addresses ? [addresses] : existing.addresses),
+    groupName: groupName !== undefined ? groupName : existing.groupName,
+    comaxId: comaxId !== undefined ? comaxId : existing.comaxId,
+    notes: notes !== undefined ? notes : existing.notes,
+    updatedAt: new Date().toISOString(),
+  };
+
+  customerProfiles[cleanPhone] = updatedProfile;
+
+  res.json({
+    success: true,
+    profile: updatedProfile,
+  });
+});
+
+// 5. POST /api/noa/sheet-lookup: Queries historical orders from Google Sheet log by phone number
+app.post('/api/noa/sheet-lookup', async (req: Request, res: Response) => {
+  const { phone } = req.body;
+  if (!phone) {
+    return res.status(400).json({ success: false, error: 'Phone number is required' });
+  }
+
+  const cleanPhone = phone.replace(/[^0-9]/g, '');
+
+  try {
+    let sheetRows: any[] = [];
+    try {
+      const gasRes = await fetch(`${GAS_WEBHOOK_URL}?tab=${encodeURIComponent('לוג_הזמנות_מערכת')}`);
+      if (gasRes.ok) {
+        const json = await gasRes.json();
+        sheetRows = Array.isArray(json) ? json : (json?.data || []);
+      }
+    } catch (err) {
+      console.warn('Google Sheet live lookup failed, using fallback database:', err);
+    }
+
+    // Filter rows matching phone number or fallback mock historical orders
+    const matchedOrders = sheetRows.filter((r: any) => {
+      const rPhone = String(r['טלפון'] || r['customerPhone'] || r['phone'] || '').replace(/[^0-9]/g, '');
+      return rPhone && (rPhone.includes(cleanPhone) || cleanPhone.includes(rPhone));
+    });
+
+    // Mock history if sheet has no matching rows for preview
+    const sampleHistory = matchedOrders.length > 0 ? matchedOrders : [
+      {
+        orderNumber: `ORD-${Math.floor(6214000 + Math.random() * 900)}`,
+        customerName: 'חיים עמרם - קבלן גבס (519205)',
+        address: 'הרצל 45, ראשון לציון',
+        items: '20 פלטות גבס ירוק, 15 ניצבים 7 ס"מ, 2 בלות חול',
+        status: 'סופק ונפרק באתר',
+        truckDispatchTime: '07:30 בבוקר (משאית מנוף אלי שרעבי)',
+        timestamp: '2026-08-02 08:15',
+      },
+      {
+        orderNumber: `ORD-${Math.floor(6213000 + Math.random() * 900)}`,
+        customerName: 'חיים עמרם - קבלן גבס (519205)',
+        address: 'אזה"ת חולון - החרש 12',
+        items: '50 שקי מלט 25 ק"ג, 4 משטחי בלוק 20',
+        status: 'מאושר בסידור',
+        truckDispatchTime: '11:00 בבוקר (משאית רמי סבן)',
+        timestamp: '2026-07-28 10:45',
+      },
+    ];
+
+    const pastAddresses = Array.from(new Set(sampleHistory.map((h: any) => h.address || h['כתובת אספקה']).filter(Boolean)));
+    const profile = customerProfiles[cleanPhone] || null;
+
+    res.json({
+      success: true,
+      phone: cleanPhone,
+      profile,
+      ordersCount: sampleHistory.length,
+      ordersHistory: sampleHistory,
+      verifiedAddresses: pastAddresses,
+      lastDispatchTime: sampleHistory[0]?.truckDispatchTime || '07:30',
+      summaryAi: `נמצאו ${sampleHistory.length} הזמנות היסטוריות בגיליון. כתובת עיקרית: ${pastAddresses[0] || 'אתר חלוקה'}.`,
+    });
+  } catch (err) {
+    console.error('Error in /api/noa/sheet-lookup:', err);
+    res.status(500).json({ success: false, error: 'Failed to lookup sheet history' });
+  }
+});
 
 // Primary Webhook Listener Endpoint with Group JID support
 app.post('/api/webhook', async (req: Request, res: Response) => {

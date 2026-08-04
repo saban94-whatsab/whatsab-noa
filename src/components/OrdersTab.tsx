@@ -128,23 +128,30 @@ export const OrdersTab: React.FC = () => {
           return (
             <div
               key={ord.orderNumber}
-              className={`bg-[#202c33] border rounded-xl p-5 transition-all space-y-4 ${
+              className={`cyber-card rounded-xl p-5 transition-all space-y-4 relative ${
                 ord.discrepancyFlag
-                  ? 'border-amber-500/60 bg-gradient-to-br from-[#202c33] via-[#202c33] to-amber-950/20'
+                  ? 'border-amber-500/60 bg-gradient-to-br from-[#14161f] via-[#14161f] to-amber-950/20'
                   : 'border-[#2a3942]'
               }`}
               id={`order-card-${ord.orderNumber}`}
             >
+              {/* Tech Dots Accent */}
+              <div className="tech-dots absolute top-3 left-3">
+                <div className="dot active"></div>
+                <div className="dot"></div>
+                <div className="dot"></div>
+              </div>
+
               {/* Order Card Top Banner */}
               <div className="flex flex-wrap justify-between items-center gap-2 border-b border-[#2a3942] pb-3">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-[#00a884]/20 text-[#00a884]">
+                  <div className="p-2.5 rounded-xl bg-[#00ffaa]/10 text-[#00ffaa] border border-[#00ffaa]/30">
                     <Package className="w-5 h-5" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-[#e9edef] text-base font-mono">{ord.orderNumber}</h4>
-                      <span className="text-xs px-2 py-0.5 rounded bg-[#111b21] border border-[#2a3942] text-[#8696a0]">
+                      <h4 className="font-bold text-[#00ffaa] text-base font-mono tracking-tight">{ord.orderNumber}</h4>
+                      <span className="text-xs px-2 py-0.5 rounded bg-[#0a0b10] border border-[#2a3942] text-[#e0e6ed]/60 font-mono">
                         {ord.origin === 'comax' ? '✨ הזמנת קומקס' : '💬 קבוצת וווטסאפ'}
                       </span>
                       {ord.discrepancyFlag && (

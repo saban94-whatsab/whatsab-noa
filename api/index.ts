@@ -185,6 +185,61 @@ app.all('/api/health', (req: Request, res: Response) => {
   });
 });
 
+app.get('/api/chat/respond', (req: Request, res: Response) => {
+  res.json({
+    status: 'online',
+    endpoint: '/api/chat/respond',
+    description: 'Vercel Express Sync Endpoint for Saban-94 WhatsApp Listener (C:\\ap94)',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.post('/api/chat/respond', async (req: Request, res: Response) => {
+  const {
+    id,
+    phone,
+    senderPhone: rawSenderPhone,
+    senderName = 'לקוח וואטסאפ',
+    isGroup = false,
+    groupId = null,
+    incomingMessage,
+    messageText,
+    timestamp = new Date().toISOString(),
+    source = 'local_ap94_listener',
+  } = req.body || {};
+
+  const cleanPhone = (phone || rawSenderPhone || '').replace(/[^0-9]/g, '');
+  const actualMessage = incomingMessage || messageText || '';
+
+  if (!cleanPhone || !actualMessage) {
+    return res.status(400).json({ success: false, error: 'Phone and incomingMessage are required' });
+  }
+
+  const replyText = await generateNoaResponse(actualMessage, senderName);
+
+  res.json({
+    success: true,
+    response: replyText,
+    replyText,
+    payload: {
+      id: id || `msg_${Date.now()}`,
+      phone: cleanPhone,
+      senderName,
+      incomingMessage: actualMessage,
+      autoReply: replyText,
+      isGroup,
+      groupId,
+      timestamp,
+      source,
+    },
+    context: {
+      comaxId: '519205',
+      customerName: senderName,
+      addresses: ['הרצל 45, ראשון לציון', 'אזה"ת חולון'],
+    },
+  });
+});
+
 app.post('/api/webhook', async (req: Request, res: Response) => {
   const { senderPhone, recipientPhone, phone, to, groupJid, messageText, senderName = 'לקוח וואטסאפ', origin = 'whatsapp' } = req.body;
   const targetJid = groupJid || recipientPhone || phone || to || senderPhone;

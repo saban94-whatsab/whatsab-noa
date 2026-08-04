@@ -92,6 +92,13 @@ interface WhatsAppState {
   toggleContactAI: (chatId: string) => void;
   toggleGlobalAI: () => void;
   overrideChatAI: (chatId: string, customText: string) => Promise<void>;
+  sendGroupMessage: (
+    groupId: string,
+    messageText: string,
+    mentions?: string[],
+    tagClientPhone?: string,
+    clientName?: string
+  ) => Promise<boolean>;
   
   // Customer & Order & Discrepancy Actions
   addCustomer: (customer: Omit<CustomerRecord, 'id' | 'createdAt'>) => void;
@@ -550,6 +557,83 @@ export const useWhatsAppStore = create<WhatsAppState>()(
             c.id === chatId ? { ...c, lastMessage: `[נציג אנושי]: ${customText}`, lastTimestamp: timeStr } : c
           ),
         });
+      },
+
+      sendGroupMessage: async (groupId, messageText, mentions, tagClientPhone, clientName) => {
+        const { contacts, messages, isSoundMuted } = get();
+
+        const targetContact = contacts.find(
+          (c) => c.phone === groupId || c.id === groupId || (c.tags?.includes('קבוצת הזמנות') && groupId.includes('120363390702096083'))
+        );
+
+        const targetChatId = targetContact ? targetContact.id : 'chat-group-customer-orders';
+        const timeStr = new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+
+        let displayText = messageText.trim();
+        if (tagClientPhone && !displayText.includes(tagClientPhone)) {
+          displayText = `@+${tagClientPhone.replace(/[\+\-\s]/g, '')} ${displayText}`;
+        }
+
+        const outboundMsg: Message = {
+          id: `msg-group-outbound-${Date.now()}`,
+          chatId: targetChatId,
+          sender: 'user',
+          senderName: 'מנהל סידור (JONI Outbound)',
+          text: displayText,
+          timestamp: timeStr,
+          status: 'sent',
+          isGroup: true,
+          groupId,
+          mentionedJids: mentions || [],
+          parsedClientPhone: tagClientPhone,
+          parsedClientName: clientName,
+        };
+
+        if (!isSoundMuted) {
+          playOutgoingSound();
+        }
+
+        const currentMsgs = messages[targetChatId] || [];
+        set({
+          messages: {
+            ...messages,
+            [targetChatId]: [...currentMsgs, outboundMsg],
+          },
+          contacts: contacts.map((c) =>
+            c.id === targetChatId
+              ? { ...c, lastMessage: `[השבה לקבוצה]: ${displayText}`, lastTimestamp: timeStr, unreadCount: 0 }
+              : c
+          ),
+        });
+
+        try {
+          const res = await fetch('/api/chat/send-group-message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              groupId,
+              messageText,
+              mentions,
+              tagClientPhone,
+              clientName,
+            }),
+          });
+
+          if (res.ok) {
+            set({
+              messages: {
+                ...get().messages,
+                [targetChatId]: (get().messages[targetChatId] || []).map((m) =>
+                  m.id === outboundMsg.id ? { ...m, status: 'delivered' } : m
+                ),
+              },
+            });
+            return true;
+          }
+        } catch (err) {
+          console.error('Failed to dispatch group message via backend:', err);
+        }
+        return false;
       },
 
       updateConfig: (newConfig) => {

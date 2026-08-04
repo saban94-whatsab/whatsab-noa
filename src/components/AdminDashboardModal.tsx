@@ -28,6 +28,7 @@ import { OrdersTab } from './OrdersTab';
 import { DiscrepanciesTab } from './DiscrepanciesTab';
 import { LogisticsDictionaryTab } from './LogisticsDictionaryTab';
 import { MessageAnalyticsChart } from './MessageAnalyticsChart';
+import { GroupChatModal } from './GroupChatModal';
 
 export const AdminDashboardModal: React.FC = () => {
   const {
@@ -69,6 +70,9 @@ export const AdminDashboardModal: React.FC = () => {
   const [newProdCategory, setNewProdCategory] = useState('חול וסומסום');
   const [newProdPrice, setNewProdPrice] = useState('');
   const [newProdUnit, setNewProdUnit] = useState('באלה');
+
+  // Local state for Group Chat Modal
+  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
 
   if (!isAdminOpen) return null;
 
@@ -137,25 +141,35 @@ export const AdminDashboardModal: React.FC = () => {
     <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-6 dir-rtl">
       <div className="bg-[#111b21] border border-[#2a3942] rounded-2xl w-full max-w-6xl h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
         {/* Modal Header */}
-        <header className="bg-[#202c33] px-6 py-4 border-b border-[#2a3942] flex items-center justify-between shrink-0">
+        <header className="bg-[#14161f] px-6 py-4 border-b border-white/10 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-950 border border-emerald-700/50 flex items-center justify-center text-[#00a884] shadow-inner">
-              <Zap className="w-6 h-6 animate-pulse" />
+            <div className="w-10 h-10 rounded-xl bg-[#0a0b10] border border-[#00ffaa]/50 flex items-center justify-center text-[#00ffaa] shadow-inner">
+              <Zap className="w-5 h-5 animate-pulse text-[#00ffaa]" />
             </div>
             <div>
-              <h2 className="text-[#e9edef] font-bold text-lg flex items-center gap-2">
-                פאנל ניהול ובקרה - נועה AI
-                <span className="text-xs bg-[#00a884] text-[#111b21] px-2 py-0.5 rounded-full font-mono font-bold">
+              <h2 className="text-[#e0e6ed] font-display font-extrabold text-xl flex items-center gap-2 tracking-tight">
+                NOA_AI <span className="text-[#00ffaa] font-mono font-normal text-sm">// CONTROL CENTER</span>
+                <span className="status-badge">
                   v2.4 Live
                 </span>
               </h2>
-              <p className="text-xs text-[#8696a0]">
-                ח. סבן חומרי בניין בע"מ • Firebase Realtime DB & Webhook Listener
+              <p className="text-xs font-mono text-[#e0e6ed]/50">
+                H. SABAN LOGISTICS v2.4 • FIREBASE_LIVE // JONI LISTENER ACTIVE
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsGroupModalOpen(true)}
+              className="px-3 py-1.5 bg-[#00a884]/20 hover:bg-[#00a884]/30 text-[#00a884] border border-[#00a884]/50 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+              id="btn-admin-open-group-modal"
+              title="פתח פאנל שיחות קבוצת הזמנות ותיוג לקוחות (JONI)"
+            >
+              <Users className="w-4 h-4" />
+              <span>👥 צ'אט קבוצות JONI</span>
+            </button>
+
             <button
               onClick={toggleGlobalAI}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all ${
@@ -180,13 +194,13 @@ export const AdminDashboardModal: React.FC = () => {
         </header>
 
         {/* Modal Navigation Tabs */}
-        <div className="bg-[#182229] border-b border-[#2a3942] px-6 flex gap-2 shrink-0 overflow-x-auto">
+        <div className="bg-[#14161f] border-b border-white/10 px-6 flex gap-2 shrink-0 overflow-x-auto">
           <button
             onClick={() => setAdminTab('metrics')}
-            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
+            className={`px-4 py-3 text-xs font-mono font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap uppercase tracking-wider ${
               adminTab === 'metrics'
-                ? 'border-[#00a884] text-[#00a884]'
-                : 'border-transparent text-[#8696a0] hover:text-[#e9edef]'
+                ? 'border-[#00ffaa] text-[#00ffaa] bg-[#0a0b10]'
+                : 'border-transparent text-[#e0e6ed]/50 hover:text-[#e0e6ed]'
             }`}
             id="admin-tab-btn-metrics"
           >
@@ -196,23 +210,23 @@ export const AdminDashboardModal: React.FC = () => {
 
           <button
             onClick={() => setAdminTab('analytics')}
-            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
+            className={`px-4 py-3 text-xs font-mono font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap uppercase tracking-wider ${
               adminTab === 'analytics'
-                ? 'border-[#00a884] text-[#00a884]'
-                : 'border-transparent text-[#8696a0] hover:text-[#e9edef]'
+                ? 'border-[#00ffaa] text-[#00ffaa] bg-[#0a0b10]'
+                : 'border-transparent text-[#e0e6ed]/50 hover:text-[#e0e6ed]'
             }`}
             id="admin-tab-btn-analytics"
           >
-            <Zap className="w-4 h-4 text-[#00a884]" />
+            <Zap className="w-4 h-4 text-[#00ffaa]" />
             2. נפח הודעות (30 ימים)
           </button>
 
           <button
             onClick={() => setAdminTab('customers')}
-            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
+            className={`px-4 py-3 text-xs font-mono font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap uppercase tracking-wider ${
               adminTab === 'customers'
-                ? 'border-[#00a884] text-[#00a884]'
-                : 'border-transparent text-[#8696a0] hover:text-[#e9edef]'
+                ? 'border-[#00ffaa] text-[#00ffaa] bg-[#0a0b10]'
+                : 'border-transparent text-[#e0e6ed]/50 hover:text-[#e0e6ed]'
             }`}
             id="admin-tab-btn-customers"
           >
@@ -222,36 +236,36 @@ export const AdminDashboardModal: React.FC = () => {
 
           <button
             onClick={() => setAdminTab('orders')}
-            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
+            className={`px-4 py-3 text-xs font-mono font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap uppercase tracking-wider ${
               adminTab === 'orders'
-                ? 'border-[#00a884] text-[#00a884]'
-                : 'border-transparent text-[#8696a0] hover:text-[#e9edef]'
+                ? 'border-[#00ffaa] text-[#00ffaa] bg-[#0a0b10]'
+                : 'border-transparent text-[#e0e6ed]/50 hover:text-[#e0e6ed]'
             }`}
             id="admin-tab-btn-orders"
           >
             <Package className="w-4 h-4" />
-            3. לוג הזמנות מערכת
+            4. לוג הזמנות מערכת
           </button>
 
           <button
             onClick={() => setAdminTab('discrepancies')}
-            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
+            className={`px-4 py-3 text-xs font-mono font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap uppercase tracking-wider ${
               adminTab === 'discrepancies'
-                ? 'border-amber-500 text-amber-400 font-bold'
-                : 'border-transparent text-[#8696a0] hover:text-[#e9edef]'
+                ? 'border-amber-500 text-amber-400 font-bold bg-[#0a0b10]'
+                : 'border-transparent text-[#e0e6ed]/50 hover:text-[#e0e6ed]'
             }`}
             id="admin-tab-btn-discrepancies"
           >
             <AlertTriangle className="w-4 h-4 text-amber-400" />
-            4. חריגות לוגיסטיות
+            5. חריגות לוגיסטיות
           </button>
 
           <button
             onClick={() => setAdminTab('dictionary')}
-            className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
+            className={`px-4 py-3 text-xs font-mono font-semibold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap uppercase tracking-wider ${
               adminTab === 'dictionary'
-                ? 'border-[#00a884] text-[#00a884]'
-                : 'border-transparent text-[#8696a0] hover:text-[#e9edef]'
+                ? 'border-[#00ffaa] text-[#00ffaa] bg-[#0a0b10]'
+                : 'border-transparent text-[#e0e6ed]/50 hover:text-[#e0e6ed]'
             }`}
             id="admin-tab-btn-dictionary"
           >
@@ -761,7 +775,19 @@ export const AdminDashboardModal: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Control Center Footer Metadata */}
+        <footer className="px-6 py-3 bg-[#0a0b10] border-t border-white/10 flex justify-between items-center font-mono text-[10px] text-[#e0e6ed]/40 shrink-0">
+          <span>COORDINATES: 32.1624° N, 34.8447° E</span>
+          <span className="text-[#00ffaa]">NOA_AI_ENGINE_STATE: NOMINAL</span>
+          <span>DEVICE: ADMIN_CONSOLE_X1</span>
+        </footer>
       </div>
+
+      <GroupChatModal
+        isOpen={isGroupModalOpen}
+        onClose={() => setIsGroupModalOpen(false)}
+      />
     </div>
   );
 };

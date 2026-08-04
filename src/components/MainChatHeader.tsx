@@ -34,21 +34,21 @@ export const MainChatHeader: React.FC = () => {
         </div>
 
         <div>
-          <div className="font-medium text-sm text-[#e9edef] flex items-center gap-2">
-            {activeContact.name}
+          <div className="font-semibold text-sm text-[#e0e6ed] flex items-center gap-2">
+            <span>{activeContact.name}</span>
             {activeContact.tags?.map((tag) => (
-              <span key={tag} className="text-[10px] bg-[#2a3942] text-[#8696a0] px-1.5 py-0.2 rounded font-normal">
+              <span key={tag} className="text-[10px] bg-[#14161f] border border-[#00ffaa]/30 text-[#00ffaa] px-1.5 py-0.2 rounded font-mono">
                 {tag}
               </span>
             ))}
           </div>
-          <div className="text-[11px] text-[#8696a0]">
+          <div className="text-[11px] text-[#e0e6ed]/50 font-mono">
             {activeContact.onlineStatus === 'typing' ? (
-              <span className="text-[#00a884] font-medium animate-pulse">נועה AI מקליד/ה...</span>
+              <span className="text-[#00ffaa] font-medium animate-pulse">נועה AI מקליד/ה...</span>
             ) : activeContact.onlineStatus === 'online' ? (
-              'נועה AI מחוברת | פעיל כעת'
+              'NOA_AI ONLINE // LIVE'
             ) : (
-              `טלפון: ${activeContact.phone}`
+              `TEL: ${activeContact.phone}`
             )}
           </div>
         </div>

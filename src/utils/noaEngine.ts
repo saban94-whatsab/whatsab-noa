@@ -48,27 +48,27 @@ export async function generateNoaPromptWithContext(userMessage: string = ""): Pr
   const dictionary = await fetchLogisticDictionary();
 
   const injectedSystemPrompt = `
-אתה "נועה AI" - נציגת השירות ותיאום ההובלות הדיגיטלית של חברת "ח. סבן חומרי בניין בע"מ".
-תפקידך הבלעדי הוא לקלוט הזמנות, להשיב על חוקי פקדונות ונהלים לוגיסטיים, ולתאם הובלות.
+אתה "נועה AI" - קולגה חדה, מקצועית ונעימה בצוות השירות ותיאום ההובלות של "ח. סבן חומרי בניין בע"מ".
+תפקידך לקלוט הזמנות, להשיב על חוקי פקדונות ונהלים לוגיסטיים, ולתאם הובלות.
 
-⚠️ חוקי ברזל למניעת ההזיות (אפס ניחושים):
-1. ענה אך ורק על סמך "המילון הלוגיסטי" ונתוני ה-Context המוזרקים לך בזמן אמת!
-2. אם הלקוח שואל על נוהל, חוק פקדונות (כמו פקדון משטחים/בלות) או פרט שאינו מופיע במילון הלוגיסטי המוזרק - רשום בדיוק: "שאלה זו מועברת לצוות הסידור האנושי לבדיקה." אל תנחש ואל תמציא חוקים מדעתך!
-3. התעלם לחלוטין ממחירים, עלויות והצעות מחיר בשלב זה! אם הלקוח שואל על מחיר או הצעת מחיר, הפנה אותו באדיבות למספר: 09-7602010.
+⚠️ חוקי זהות וסגנון (Humanized Noa AI Rules):
+1. **חוק הפרופורציונליות:** התאם את אורך התשובה ישירות להודעת הלקוח.
+   - אם הלקוח שולח ברכה קצרה ("היי", "שלום", "בוקר טוב", "מה נשמע"), ענה בברכה אנושית חמה וקצרה (משפט אחד, למשל: "היי! בוקר טוב, במה אפשר לעזור היום?").
+   - אל תפרט היסטוריית הזמנות עבר, אל תציג רשימות ארוכות ואל תרשום פסקאות ארוכות אלא אם הלקוח ביקש זאת במפורש.
+2. **טון דיבור אנושי וחברי:** דבר כמו קולגה חדה, מקצועית ונעימה ב'ח. סבן'. הימנע לחלוטין מניסוחים רובוטיים, שטנצים קבועים, תבניות פורמליות נוקשות או חותמות טקסט מעייפות.
+3. **פשטות וקיצור:** שמור על תשובות נקיות וקצרות (1-2 משפטים בלבד בפנייה ראשונית או בהודעות פשוטות), בעברית יומיומית, טבעית וברורה בסגנון WhatsApp.
 
-חוקי סגנון:
-- ענה בעברית פשוטה, מקצועית, אדיבה ותכליתית בסגנון WhatsApp.
-- ללא חפירות, ללא חזרה על שאלת הלקוח.
-- מותר להשתמש באימוג'ים מתאימים (🏗️, 🚛, 📍, 👍).
-- בהזמנות: אמת תמיד רשימת חומרים, כתובת/מיקום, ואיש קשר בשטח. אם חסר עובי (כמו פנל מבודד) - שאל רק על העובי.
+⚠️ חוקי אמינות ועובדות (אפס ניחושים):
+- ענה אך ורק על סמך "המילון הלוגיסטי" ונתוני ה-Context המוזרקים בזמן אמת.
+- אם מדובר בנוהל שלא מופיע במילון - רשום בקצרה: "שאלה זו מועברת לצוות הסידור האנושי לבדיקה."
+- התעלם לחלוטין ממחירים והצעות מחיר! אם שואלים על מחיר - הפנה באדיבות למספר: 09-7602010.
+- בהזמנות: אמת בטבעיות רשימת חומרים, כתובת, ואיש קשר בשטח.
 
-המילון הלוגיסטי המעודכן בזמן אמת (עובדות בלבד!):
+המילון הלוגיסטי המעודכן בזמן אמת:
 - חוק פיקדון משטחים: ${dictionary.palletsDepositRule}
 - חוק פיקדון בלות: ${dictionary.bigBagDepositRule}
 - נוהל ביטולים: ${dictionary.cancellationPolicy}
 - תנאי פריקת מנוף: ${dictionary.craneUnloadRules}
-
-הוראה קשיחה: עני ללקוח אך ורק על בסיס הנתונים הללו! אם הנתון לא מופיע כאן או מדובר במחירים, העבירי לצוות אנושי או למספר 09-7602010.
   `.trim();
 
   return injectedSystemPrompt;
@@ -109,13 +109,21 @@ export function processIncomingNoaMessage(incomingPayload: IncomingNoaPayload): 
     return responseAction;
   }
 
-  // 4. Mutation: Non-Order Inquiries & Price Queries -> Phone Referral (Rule 3)
-  if (isStoreInquiryOnly(rawText)) {
-    responseAction.replyText = `שלום! קו זה מיועד למחלקת הזמנות וסידור הובלות בלבד. 🚚\nלבירור מחירים, מלאי בחנות או הגעה פרונטלית, נשמח לעזור בטלפון: ${SYSTEM_CONFIG.PHONE_ORDERS} או בסניף.`;
+  // 4. Greetings & Simple Contact (Proportionality Rule: short, warm response)
+  const cleanLower = rawText.trim().toLowerCase();
+  const simpleGreetings = ["היי", "שלום", "אהלן", "בוקר טוב", "ערב טוב", "צהריים טובים", "מה קורה", "מה נשמע", "היי נועה", "שלום נועה", "אח יקר", "הי"];
+  if (simpleGreetings.includes(cleanLower) || (cleanLower.length <= 10 && simpleGreetings.some(g => cleanLower.startsWith(g)))) {
+    responseAction.replyText = `היי! בוקר טוב, במה אפשר לעזור היום בח. סבן? 👋`;
     return responseAction;
   }
 
-  // 5. Deposit & Logistics Rules Check
+  // 5. Mutation: Non-Order Inquiries & Price Queries -> Phone Referral (Rule 3)
+  if (isStoreInquiryOnly(rawText)) {
+    responseAction.replyText = `שלום! קו זה מיועד למחלקת הזמנות וסידור הובלות. 🚚 לבירור מחירים ומלאי בחנות, נשמח לעזור בטלפון: ${SYSTEM_CONFIG.PHONE_ORDERS}.`;
+    return responseAction;
+  }
+
+  // 6. Deposit & Logistics Rules Check
   const depositCheck = checkDepositAndLogisticsRules(rawText);
   if (depositCheck.handled) {
     responseAction.replyText = depositCheck.replyText;
@@ -125,22 +133,22 @@ export function processIncomingNoaMessage(incomingPayload: IncomingNoaPayload): 
     return responseAction;
   }
 
-  // 6. Mutation: Specific missing parameters check (e.g. Panel without thickness)
+  // 7. Mutation: Specific missing parameters check (e.g. Panel without thickness)
   const missingDetailCheck = detectMissingOrderDetails(rawText);
   if (missingDetailCheck.isMissing) {
     responseAction.replyText = missingDetailCheck.promptQuestion;
     return responseAction;
   }
 
-  // 7. Standard Order Logic Detection
+  // 8. Standard Order Logic Detection
   if (isOrderIntent(rawText)) {
-    responseAction.replyText = `קיבלתי את ההזמנה! 👍\nההזמנה בטיפול ומועברת לתיאום מול סידור ההובלות. נעדכן אותך בהקדם לגבי צפי אספקה.`;
+    responseAction.replyText = `קיבלתי את ההזמנה! 👍 מעבירה לסידור ההובלות ונעדכן אותך בהקדם לגבי צפי אספקה.`;
     responseAction.orderParsed = extractOrderItems(rawText);
     return responseAction;
   }
 
-  // Default Fallback Response
-  responseAction.replyText = `שלום, הגעת ל${SYSTEM_CONFIG.COMPANY_NAME} (מחלקת הזמנות). 🏗️\nאיך נוכל לעזור היום? מומלץ לפרט את רשימת החומרים, כתובת ואיש קשר בשטח.`;
+  // Default Fallback Response (Short, warm & human)
+  responseAction.replyText = `היי, במה אוכל לסייע לך היום בח. סבן? 👍`;
   return responseAction;
 }
 
