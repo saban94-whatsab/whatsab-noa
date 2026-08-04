@@ -1,6 +1,8 @@
+import { gasPostRequest } from '../services/gasRouter';
+
 /**
  * Utility function to send order & chatbot interaction data directly to Google Sheets via GAS_WEBHOOK_URL
- * Ensures every incoming order or message is recorded as a new row in Google Sheets.
+ * Ensures every incoming order or message is recorded as a new row in Google Sheets without 500 error loops.
  */
 
 export interface GoogleSheetsOrderPayload {
@@ -28,7 +30,7 @@ export interface GoogleSheetsOrderPayload {
 
 export async function syncOrderToGoogleSheets(
   payload: GoogleSheetsOrderPayload,
-  customWebhookUrl?: string
+  _customWebhookUrl?: string
 ) {
   const timestampStr =
     payload.timestamp || new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
@@ -59,7 +61,6 @@ export async function syncOrderToGoogleSheets(
     status: payload.status || 'בתהליך אספקה',
     discrepancyFlag: !!payload.discrepancyFlag,
     discrepancyNotes: payload.discrepancyNotes || '',
-    // Ready-made array for Google Apps Script sheet.appendRow(row)
     row: [
       timestampStr,
       payload.orderNumber || 'הזמנה',
@@ -74,20 +75,10 @@ export async function syncOrderToGoogleSheets(
   };
 
   try {
-    const res = await fetch('/api/google-sheets/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...sheetPayload, customWebhookUrl }),
-    });
-
-    if (!res.ok) {
-      console.warn('[Google Sheets Frontend Sync] Warning status:', res.status);
-    }
-
-    const data = await res.json().catch(() => ({}));
-    return { success: true, data };
+    const res = await gasPostRequest('appendRow', sheetPayload);
+    return { success: res.success, data: res.data };
   } catch (err) {
-    console.error('[Google Sheets Frontend Sync] Error syncing order to Google Sheets:', err);
+    console.error('[Google Sheets Frontend Sync] Note:', err);
     return { success: false, error: String(err) };
   }
 }

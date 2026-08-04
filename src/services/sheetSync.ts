@@ -1,12 +1,11 @@
 import { LogisticsDictionaryItem, OrderRecord, CustomerRecord } from '../types';
-
-const DEFAULT_GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbyQUaDDWSiG6osVHQ8ZQEdXqVNBFFoaFcLxr6iJvJYZpsc8TSfQ_wjvc5HMtKyLsyG80A/exec';
+import { gasGetRequest, PRIMARY_GAS_WEBHOOK_URL } from './gasRouter';
 
 export function getGasWebhookUrl(): string {
   if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GAS_WEBHOOK_URL) {
     return import.meta.env.VITE_GAS_WEBHOOK_URL;
   }
-  return DEFAULT_GAS_WEBHOOK_URL;
+  return PRIMARY_GAS_WEBHOOK_URL;
 }
 
 /**
@@ -22,45 +21,41 @@ export function normalizeTabName(tab: string): string {
 }
 
 /**
- * Robust fetch helper that first attempts /api/sheets-fetch proxy,
- * and if that fails or returns non-200/non-JSON, executes a direct Client-to-GAS HTTP GET fetch.
+ * Robust fetch helper using Apps Script Router with action=fetchSheets
+ * and fallback to direct client fetch.
  */
 export async function fetchSheetTab(rawTabName: string): Promise<any[]> {
   const tabName = normalizeTabName(rawTabName);
-  let rows: any[] = [];
 
-  // Attempt 1: Server proxy endpoint /api/sheets-fetch
+  // Attempt 1: Route through Enterprise GAS Router (action=fetchSheets)
+  const routerRes = await gasGetRequest('fetchSheets', { tab: tabName });
+  if (routerRes.success && routerRes.data.length > 0) {
+    return routerRes.data;
+  }
+
+  // Attempt 2: Direct URL fetch using tab parameter directly
   try {
-    const proxyUrl = `/api/sheets-fetch?tab=${encodeURIComponent(tabName)}`;
-    const proxyRes = await fetch(proxyUrl, { headers: { Accept: 'application/json' } });
-    if (proxyRes.ok) {
-      const proxyJson = await proxyRes.json();
-      if (proxyJson && proxyJson.success && Array.isArray(proxyJson.data)) {
-        rows = proxyJson.data;
-      } else if (Array.isArray(proxyJson)) {
-        rows = proxyJson;
-      }
-    }
-  } catch {
-    // Proxy failed or unavailable, failover to direct GAS fetch below
-  }
-
-  // Attempt 2: Direct Client-to-GAS fetch (if proxy returned empty or failed)
-  if (rows.length === 0) {
-    try {
-      const gasUrl = getGasWebhookUrl();
+    const gasUrl = getGasWebhookUrl();
+    if (gasUrl) {
       const directUrl = `${gasUrl}?tab=${encodeURIComponent(tabName)}`;
-      const directRes = await fetch(directUrl, { method: 'GET' });
-      if (directRes.ok) {
-        const json = await directRes.json();
-        rows = Array.isArray(json) ? json : (json?.data || []);
+      const directRes = await fetch(directUrl, { method: 'GET' }).catch(() => null);
+      if (directRes && directRes.ok) {
+        const text = await directRes.text().catch(() => '');
+        if (text) {
+          try {
+            const json = JSON.parse(text);
+            return Array.isArray(json) ? json : (json?.data && Array.isArray(json.data) ? json.data : []);
+          } catch {
+            return [];
+          }
+        }
       }
-    } catch (gasErr) {
-      console.warn(`[sheetSync] Direct GAS fetch for tab "${tabName}" fallback empty:`, gasErr);
     }
+  } catch (gasErr) {
+    console.warn(`[sheetSync] Direct fallback fetch for tab "${tabName}" note:`, gasErr);
   }
 
-  return rows;
+  return [];
 }
 
 /**

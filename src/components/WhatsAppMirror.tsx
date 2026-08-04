@@ -12,6 +12,9 @@ import { CustomerProfileDrawer } from './CustomerProfileDrawer';
 import { NoaCommandCenter } from './NoaCommandCenter';
 import { HeaderMenuDropdown } from './HeaderMenuDropdown';
 
+import { PollingController } from '../utils/pollingController';
+import { whatsappService } from '../services/whatsappService';
+
 // Dual-tone WhatsApp Web sound chime synthesizer
 const playNotificationChime = () => {
   try {
@@ -78,48 +81,40 @@ export const WhatsAppMirror: React.FC = () => {
   const [toast, setToast] = useState<ToastNotification | null>(null);
   const prevLogsCountRef = useRef<number>(0);
 
-  // Poll local server or /api/chat/sync every 3 seconds for incoming messages from C:\ap94
+  // Adaptive Polling Controller for live message synchronization without 500 error cascades
   useEffect(() => {
-    const pollInterval = setInterval(async () => {
-      try {
-        const localServerBase = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_LOCAL_SERVER_URL)
-          ? import.meta.env.VITE_LOCAL_SERVER_URL.replace(/\/$/, '')
-          : '';
-        
-        const syncUrl = localServerBase ? `${localServerBase}/api/chat/sync` : '/api/chat/sync';
+    const controller = new PollingController(
+      async () => {
+        const syncRes = await whatsappService.syncChatState();
+        if (syncRes.success) {
+          const logsCount = syncRes.status?.activeLogsCount || syncRes.messages.length;
+          if (prevLogsCountRef.current > 0 && logsCount > prevLogsCountRef.current) {
+            playNotificationChime();
+            setToast({
+              id: `toast-${Date.now()}`,
+              senderName: 'סנכרון C:\\ap94',
+              messageText: 'הודעה חדשה התקבלה במערכת!',
+            });
 
-        const res = await fetch(syncUrl, {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
-        }).catch(() => null);
-
-        if (res && res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await res.json().catch(() => null);
-            if (data && typeof data.activeLogsCount === 'number') {
-              if (prevLogsCountRef.current > 0 && data.activeLogsCount > prevLogsCountRef.current) {
-                playNotificationChime();
-                setToast({
-                  id: `toast-${Date.now()}`,
-                  senderName: 'סנכרון C:\\ap94',
-                  messageText: 'הודעה חדשה התקבלה במערכת!',
-                });
-
-                setTimeout(() => {
-                  setToast(null);
-                }, 4000);
-              }
-              prevLogsCountRef.current = data.activeLogsCount;
-            }
+            setTimeout(() => {
+              setToast(null);
+            }, 4000);
           }
+          prevLogsCountRef.current = logsCount;
+          return true;
         }
-      } catch {
-        // Silent catch for background polling failure (e.g. offline or Vercel non-200)
+        return false;
+      },
+      {
+        name: 'WhatsAppLiveSync',
+        baseIntervalMs: 3000,
+        maxIntervalMs: 25000,
+        maxConsecutiveFailures: 4,
       }
-    }, 3000);
+    );
 
-    return () => clearInterval(pollInterval);
+    controller.start();
+    return () => controller.stop();
   }, []);
 
   const activeContact = contacts.find((c) => c.id === activeChatId) || contacts[0];
