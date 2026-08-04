@@ -78,35 +78,46 @@ export const WhatsAppMirror: React.FC = () => {
   const [toast, setToast] = useState<ToastNotification | null>(null);
   const prevLogsCountRef = useRef<number>(0);
 
-  // Poll /api/chat/sync every 2 seconds for incoming messages from C:\ap94
+  // Poll local server or /api/chat/sync every 3 seconds for incoming messages from C:\ap94
   useEffect(() => {
     const pollInterval = setInterval(async () => {
       try {
-        const res = await fetch('/api/chat/sync');
-        if (res.ok) {
-          const data = await res.json();
-          if (data && typeof data.activeLogsCount === 'number') {
-            if (prevLogsCountRef.current > 0 && data.activeLogsCount > prevLogsCountRef.current) {
-              // New message arrived via sync!
-              playNotificationChime();
-              setToast({
-                id: `toast-${Date.now()}`,
-                senderName: 'חיים עמרם (לקוח)',
-                messageText: 'הודעה חדשה התקבלה דרך שרת C:\\ap94',
-              });
+        const localServerBase = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_LOCAL_SERVER_URL)
+          ? import.meta.env.VITE_LOCAL_SERVER_URL.replace(/\/$/, '')
+          : '';
+        
+        const syncUrl = localServerBase ? `${localServerBase}/api/chat/sync` : '/api/chat/sync';
 
-              // Auto dismiss toast after 4 seconds
-              setTimeout(() => {
-                setToast(null);
-              }, 4000);
+        const res = await fetch(syncUrl, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+        }).catch(() => null);
+
+        if (res && res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const data = await res.json().catch(() => null);
+            if (data && typeof data.activeLogsCount === 'number') {
+              if (prevLogsCountRef.current > 0 && data.activeLogsCount > prevLogsCountRef.current) {
+                playNotificationChime();
+                setToast({
+                  id: `toast-${Date.now()}`,
+                  senderName: 'סנכרון C:\\ap94',
+                  messageText: 'הודעה חדשה התקבלה במערכת!',
+                });
+
+                setTimeout(() => {
+                  setToast(null);
+                }, 4000);
+              }
+              prevLogsCountRef.current = data.activeLogsCount;
             }
-            prevLogsCountRef.current = data.activeLogsCount;
           }
         }
       } catch {
-        // Silent catch for background polling
+        // Silent catch for background polling failure (e.g. offline or Vercel non-200)
       }
-    }, 2000);
+    }, 3000);
 
     return () => clearInterval(pollInterval);
   }, []);
