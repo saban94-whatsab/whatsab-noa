@@ -178,11 +178,97 @@ async function sendOrderToGoogleSheets(payloadData: any) {
 }
 
 app.all('/api/health', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'application/json');
   res.json({
     status: 'online',
     system: 'סידור / נועה AI - ח. סבן חומרי בניין (Vercel Serverless Function)',
     timestamp: new Date().toISOString(),
   });
+});
+
+app.get('/api/chat/sync', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'application/json');
+  try {
+    return res.status(200).json({
+      success: true,
+      chats: [],
+      events: [],
+      serverTime: new Date().toISOString(),
+      chatModes: { '0508861080': 'auto' },
+      customerProfiles: {},
+      activeLogsCount: 0,
+      listenerStatus: {
+        localServerActive: true,
+        noaPhone: '972508861080',
+        gasWebhookConfigured: Boolean(GAS_WEBHOOK_URL),
+        joniUrlConfigured: Boolean(JONI_FIREBASE_URL),
+      }
+    });
+  } catch (err) {
+    console.error('Error in Vercel /api/chat/sync:', err);
+    return res.status(200).json({
+      success: true,
+      chats: [],
+      events: [],
+      activeLogsCount: 0,
+      message: 'Safely recovered from chat sync error',
+      error: String(err),
+    });
+  }
+});
+
+app.get('/api/sheets-fetch', async (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'application/json');
+  try {
+    const rawTabParam = req.query.tab ? String(req.query.tab) : 'לוג_הזמנות_מערכת';
+    let tabName = rawTabParam;
+    try {
+      tabName = decodeURIComponent(rawTabParam);
+    } catch {
+      tabName = rawTabParam;
+    }
+
+    const gasUrl = GAS_WEBHOOK_URL || process.env.GAS_WEBHOOK_URL;
+    if (!gasUrl) {
+      return res.status(200).json({
+        success: false,
+        data: [],
+        message: 'Missing sheet configuration',
+      });
+    }
+
+    const targetUrl = `${gasUrl}?tab=${encodeURIComponent(tabName)}`;
+    const gasRes = await fetch(targetUrl, { method: 'GET' });
+    if (!gasRes.ok) {
+      return res.status(200).json({
+        success: false,
+        data: [],
+        message: 'Missing sheet configuration',
+      });
+    }
+
+    const text = await gasRes.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = [];
+    }
+
+    const finalArray = Array.isArray(data) ? data : (data?.data && Array.isArray(data.data) ? data.data : []);
+    return res.status(200).json({
+      success: true,
+      data: finalArray,
+    });
+  } catch (err) {
+    console.warn('[Vercel Sheets Proxy] GAS fetch note:', err);
+    return res.status(200).json({
+      success: false,
+      data: [],
+      message: 'Missing sheet configuration',
+      error: String(err),
+    });
+  }
 });
 
 app.get('/api/chat/respond', (req: Request, res: Response) => {

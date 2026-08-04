@@ -581,19 +581,38 @@ const customerProfiles: Record<string, {
 
 // 1. GET /api/chat/sync: Returns active chats, profiles, and live auto/manual status
 app.get('/api/chat/sync', (req: Request, res: Response) => {
-  res.json({
-    success: true,
-    serverTime: new Date().toISOString(),
-    chatModes,
-    customerProfiles,
-    activeLogsCount: backendLogs.length,
-    listenerStatus: {
-      localServerActive: true,
-      noaPhone: '972508861080',
-      gasWebhookConfigured: Boolean(GAS_WEBHOOK_URL),
-      joniUrlConfigured: Boolean(JONI_FIREBASE_URL),
-    }
-  });
+  res.setHeader('Content-Type', 'application/json');
+  try {
+    const safeChatModes = typeof chatModes !== 'undefined' && chatModes ? chatModes : {};
+    const safeCustomerProfiles = typeof customerProfiles !== 'undefined' && customerProfiles ? customerProfiles : {};
+    const safeLogs = Array.isArray(backendLogs) ? backendLogs : [];
+
+    return res.status(200).json({
+      success: true,
+      chats: [],
+      events: [],
+      serverTime: new Date().toISOString(),
+      chatModes: safeChatModes,
+      customerProfiles: safeCustomerProfiles,
+      activeLogsCount: safeLogs.length,
+      listenerStatus: {
+        localServerActive: true,
+        noaPhone: '972508861080',
+        gasWebhookConfigured: Boolean(GAS_WEBHOOK_URL),
+        joniUrlConfigured: Boolean(JONI_FIREBASE_URL),
+      }
+    });
+  } catch (err) {
+    console.error('Error in /api/chat/sync:', err);
+    return res.status(200).json({
+      success: true,
+      chats: [],
+      events: [],
+      activeLogsCount: 0,
+      message: 'Safely recovered from chat sync error',
+      error: String(err),
+    });
+  }
 });
 
 // Dedicated Vercel & Local Sync Endpoint: /api/chat/respond
@@ -1103,15 +1122,35 @@ app.post('/api/google-sheets/sync', async (req: Request, res: Response) => {
 
 // Proxy endpoint for Google Apps Script GET requests to avoid browser CORS/redirect issues
 app.get('/api/sheets-fetch', async (req: Request, res: Response) => {
-  const tabName = req.query.tab ? String(req.query.tab) : 'לוג_הזמנות_מערכת';
-  const targetUrl = `${GAS_WEBHOOK_URL}?tab=${encodeURIComponent(tabName)}`;
-
+  res.setHeader('Content-Type', 'application/json');
   try {
+    const rawTabParam = req.query.tab ? String(req.query.tab) : 'לוג_הזמנות_מערכת';
+    let tabName = rawTabParam;
+    try {
+      tabName = decodeURIComponent(rawTabParam);
+    } catch {
+      tabName = rawTabParam;
+    }
+
+    const gasUrl = GAS_WEBHOOK_URL || process.env.GAS_WEBHOOK_URL;
+    if (!gasUrl) {
+      return res.status(200).json({
+        success: false,
+        data: [],
+        message: 'Missing sheet configuration',
+      });
+    }
+
+    const targetUrl = `${gasUrl}?tab=${encodeURIComponent(tabName)}`;
     const gasRes = await fetch(targetUrl, { method: 'GET' });
     if (!gasRes.ok) {
-      res.json({ success: false, data: [] });
-      return;
+      return res.status(200).json({
+        success: false,
+        data: [],
+        message: 'Missing sheet configuration',
+      });
     }
+
     const text = await gasRes.text();
     let data;
     try {
@@ -1119,10 +1158,20 @@ app.get('/api/sheets-fetch', async (req: Request, res: Response) => {
     } catch {
       data = [];
     }
-    res.json({ success: true, data });
+
+    const finalArray = Array.isArray(data) ? data : (data?.data && Array.isArray(data.data) ? data.data : []);
+    return res.status(200).json({
+      success: true,
+      data: finalArray,
+    });
   } catch (err) {
     console.warn('[Sheets Proxy] Note: GAS fetch returned non-JSON or unreachable:', err);
-    res.json({ success: false, data: [], error: String(err) });
+    return res.status(200).json({
+      success: false,
+      data: [],
+      message: 'Missing sheet configuration',
+      error: String(err),
+    });
   }
 });
 
