@@ -5,7 +5,9 @@ import { PasswordModal } from './components/PasswordModal';
 import { MobileHamburgerMenu } from './components/MobileHamburgerMenu';
 import { OfflineBanner } from './components/OfflineBanner';
 import { NewOrderToast } from './components/NewOrderToast';
+import { ToastHost } from './components/ToastHost';
 import { useWhatsAppStore } from './store/useWhatsAppStore';
+import { useUiStore, applyThemeToDocument } from './store/useUiStore';
 
 export default function App() {
   const {
@@ -17,6 +19,13 @@ export default function App() {
     requestAdminAccess,
     syncLiveSheetData,
   } = useWhatsAppStore();
+
+  const theme = useUiStore((s) => s.theme);
+
+  // Ensure <html> reflects the persisted theme on mount
+  useEffect(() => {
+    applyThemeToDocument(theme);
+  }, [theme]);
 
   // Auto-sync live Google Sheet data (order log tab & customer folders) on mount and poll every 15 seconds
   useEffect(() => {
